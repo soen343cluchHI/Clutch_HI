@@ -1,0 +1,70 @@
+/* Design tokens. Radius rule: controls use --radius-control, panels and role cards use --radius-panel. */
+:root {
+  color-scheme: light dark;
+  --font-sans: 'Geist Variable', system-ui, sans-serif;
+
+  --bg: #f4f4f5;
+  --surface: #fcfcfc;
+  --text: #18181b;
+  --text-muted: #52525b;
+  --border: #d4d4d8;
+  --border-strong: #a1a1aa;
+  --accent: #c2381f;
+  --accent-hover: #a82f19;
+  --accent-ink: #fcfcfc;
+  --accent-soft: #fbe9e5;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --shadow: 0 1px 2px rgb(24 24 27 / 0.04), 0 8px 24px rgb(24 24 27 / 0.06);
+
+  --radius-control: 10px;
+  --radius-panel: 16px;
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f0f11;
+    --surface: #18181b;
+    --text: #f4f4f5;
+    --text-muted: #a1a1aa;
+    --border: #3f3f46;
+    --border-strong: #71717a;
+    --accent: #f0694d;
+    --accent-hover: #f48469;
+    --accent-ink: #18181b;
+    --accent-soft: #3a1d17;
+    --danger: #f97066;
+    --danger-soft: #3b1714;
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.3);
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1, p, dl, dd, fieldset { margin: 0; }
+h1 { text-wrap: balance; }
+p { text-wrap: pretty; }
+button, input { font: inherit; color: inherit; touch-action: manipulation; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
