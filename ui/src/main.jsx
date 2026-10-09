@@ -1,9 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createUserWithEmailAndPassword, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { onValue, ref, serverTimestamp, set } from 'firebase/database';
 import { auth, database, configurationError } from './firebase';
-import './style.css';
+import AuthLayout from './components/AuthLayout';
+import AuthPage from './pages/AuthPage';
+import ProfileSetupPage from './pages/ProfileSetupPage';
+import AccountPage from './pages/AccountPage';
+import StatusPage from './pages/StatusPage';
+import '@fontsource-variable/geist';
+import './styles/theme.css';
+import './styles/auth.css';
 
 const roles = ['Customer', 'Restaurant', 'Courier', 'Operator'];
 
@@ -74,43 +81,20 @@ function App() {
     finally { setBusy(false); }
   }
 
-  if (configurationError) return <main><h1>SugarRush setup</h1><p role="alert">{configurationError}</p></main>;
-  if (loading) return <main><p>Loading…</p></main>;
+  function screen() {
+    if (configurationError) return <StatusPage title="Setup required" message={configurationError} />;
+    if (loading) return <StatusPage loading />;
+    if (!user) return <AuthPage
+      registering={registering} email={email} setEmail={setEmail} password={password} setPassword={setPassword}
+      roles={roles} role={role} setRole={setRole} busy={busy} error={error} onSubmit={submit}
+      onToggleMode={() => { setRegistering(!registering); setError(''); }} />;
+    if (profileError) return <StatusPage title="Profile unavailable" message={`Could not load your profile: ${profileError}`} busy={busy} error={error} onLogout={logout} />;
+    if (!profile) return <ProfileSetupPage roles={roles} role={role} setRole={setRole} busy={busy} error={error} onSubmit={submit} onLogout={logout} />;
+    if (!roles.includes(profile.role)) return <StatusPage title="Profile unavailable" message="Your profile has an invalid role. Contact the project team." busy={busy} error={error} onLogout={logout} />;
+    return <AccountPage email={user.email} role={profile.role} busy={busy} error={error} onLogout={logout} />;
+  }
 
-  return <main>
-    <h1>SugarRush</h1>
-    {error && <p role="alert">{error}</p>}
-    {user ? <>
-      {profileError ? <p role="alert">Could not load your profile: {profileError}</p> :
-        profile ? (roles.includes(profile.role) ? <>
-          <h2>{profile.role} Dashboard</h2>
-          <p>Email: {user.email}</p><p>Role: {profile.role}</p>
-        </> : <p role="alert">Your profile has an invalid role. Contact the project team.</p>) : <>
-          <h2>Complete registration</h2>
-          <p>Your account is signed in, but your profile has not been saved. Choose a role and retry.</p>
-          <form onSubmit={submit}>
-            <RoleSelect role={role} onChange={setRole} />
-            <button disabled={busy}>Save profile</button>
-          </form>
-        </>}
-      <button onClick={logout} disabled={busy}>Logout</button>
-    </> : <>
-      <h2>{registering ? 'Register' : 'Login'}</h2>
-      <form onSubmit={submit}>
-        <label>Email<input type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></label>
-        <label>Password<input type="password" autoComplete={registering ? 'new-password' : 'current-password'} minLength={registering ? 6 : undefined} required value={password} onChange={e => setPassword(e.target.value)} /></label>
-        {registering && <RoleSelect role={role} onChange={setRole} />}
-        <button disabled={busy}>{busy ? 'Please wait…' : registering ? 'Register' : 'Login'}</button>
-      </form>
-      <button disabled={busy} onClick={() => { setRegistering(!registering); setError(''); }}>{registering ? 'Back to login' : 'Create an account'}</button>
-    </>}
-  </main>;
-}
-
-function RoleSelect({ role, onChange }) {
-  return <label>Role<select value={role} onChange={e => onChange(e.target.value)}>
-    {roles.map(value => <option key={value}>{value}</option>)}
-  </select></label>;
+  return <AuthLayout>{screen()}</AuthLayout>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);
