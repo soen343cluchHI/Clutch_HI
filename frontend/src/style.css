@@ -1,0 +1,6 @@
+body { font-family: sans-serif; margin: 2rem; }
+main { max-width: 28rem; }
+label { display: block; margin: 1rem 0; }
+input, select { display: block; padding: .4rem; }
+button { margin: .4rem .4rem .4rem 0; padding: .4rem; }
+[role="alert"] { color: #a00; }
