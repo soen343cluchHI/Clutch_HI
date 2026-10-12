@@ -7,7 +7,10 @@ public final class AuthenticationService {
  private final Map<String,Session> sessions=new HashMap<>();
  public AuthenticationService(RegistrationService registration){this.registration=registration;}
  public Session login(String username,String password){
-  User user=registration.authenticate(username,password);
+  return openSession(registration.authenticate(username,password));
+ }
+
+ public Session openSession(User user){
   Session session=new Session(UUID.randomUUID().toString(),user,Instant.now());
   sessions.put(session.token(),session);return session;
  }

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import SimulatorMap, { queueBand } from '../components/SimulatorMap';
 import * as api from '../services/dashboardApi';
 import '../styles/dashboard.css';
@@ -7,14 +7,11 @@ const money = value => new Intl.NumberFormat('en-CA', {
   style: 'currency', currency: 'CAD',
 }).format(value);
 
-export default function DashboardPage({ email, onLogout, busy: authBusy, error: authError }) {
+export default function DashboardPage({ firebaseUser, profileRole, email, onLogout, busy: authBusy, error: authError }) {
   const [tab, setTab] = useState('Map');
   const [search, setSearch] = useState('');
   const [showLabels, setShowLabels] = useState(true);
-  const [showConnection, setShowConnection] = useState(false);
   const [session, setSession] = useState(null);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
   const [restaurants, setRestaurants] = useState([]);
   const [orders, setOrders] = useState([]);
   const [queues, setQueues] = useState({});
@@ -34,7 +31,7 @@ export default function DashboardPage({ email, onLogout, busy: authBusy, error: 
 
   async function send(current, action, fields = {}) {
     try {
-      const result = await api.command(current.token, action, fields);
+      const result = await api.command(current, action, fields);
       log(action, true, result?.state ? `Order ${result.id.slice(0, 8)} → ${result.state}` : 'Completed');
       return result;
     } catch (failure) {
@@ -45,7 +42,6 @@ export default function DashboardPage({ email, onLogout, busy: authBusy, error: 
 
   async function refresh(current) {
     const all = await send(current, 'BROWSE_RESTAURANTS');
-    // Staff see their own restaurants. Java still verifies ownership on writes.
     const visible = current.user.role === 'RESTAURANT'
       ? all.filter(r => r.ownerId === current.user.id) : all;
     setRestaurants(visible);
@@ -68,22 +64,27 @@ export default function DashboardPage({ email, onLogout, busy: authBusy, error: 
     finally { lock.current = false; setBusy(false); }
   }
 
-  function signIn(event) {
-    event.preventDefault();
-    run(async () => {
+  async function connectAccount() {
+    await run(async () => {
       let current;
       try {
-        current = await api.login(username.trim(), password);
-        log('LOGIN', true, `Signed in as ${current.user.username}`);
+        current = await api.connect(firebaseUser);
+        if (profileRole && current.user.role !== profileRole.toUpperCase()) {
+          throw new Error('Your account role has not been approved for this workspace yet. Contact your project administrator.');
+        }
+        log('SESSION_INFO', true, `Authenticated as ${current.user.username} (${current.user.role})`);
       } catch (failure) {
-        log('LOGIN', false, failure.message);
+        log('SESSION_INFO', false, failure.message);
         throw failure;
-      } finally { setPassword(''); }
-      setSession(current);
+      }
       await refresh(current);
-      setShowConnection(false);
+      setSession(current);
     });
   }
+
+  useEffect(() => {
+    connectAccount();
+  }, [firebaseUser, profileRole]);
 
   function place(event) {
     event.preventDefault();
@@ -106,19 +107,6 @@ export default function DashboardPage({ email, onLogout, busy: authBusy, error: 
     run(async () => {
       await send(session, action, { orderId: order.id, reason: reasons[order.id] || '' });
       await refresh(session);
-    });
-  }
-
-  function switchSession() {
-    run(async () => {
-      await send(session, 'LOGOUT');
-      setSession(null);
-      setShowConnection(true);
-      setSearch('');
-      setRestaurants([]);
-      setOrders([]);
-      setQuantities({});
-      setReasons({});
     });
   }
 
@@ -166,7 +154,7 @@ export default function DashboardPage({ email, onLogout, busy: authBusy, error: 
           <div><strong>{restaurantOrders.filter(o => o.state === 'Preparing').length}</strong><span>Preparing*</span></div>
           <div><strong>{restaurantOrders.filter(o => o.state === 'Ready').length}</strong><span>Ready*</span></div>
         </div>
-        <p className="dash-muted">*Counts cover the orders visible to your Java account.</p>
+        <p className="dash-muted">*Counts cover the orders visible to your account.</p>
         <form onSubmit={place}>
           <h3>Menu</h3>
           {!restaurant.menu.length && <p>The menu is empty.</p>}
@@ -192,7 +180,7 @@ export default function DashboardPage({ email, onLogout, busy: authBusy, error: 
         <span className="dash-badge">{displayedOrders.length} orders</span>
       </div>
       {role === 'RESTAURANT' && <p className="dash-muted">Prepare accepted orders in queue order. Finish the first before starting the next.</p>}
-      {!displayedOrders.length && <p className="dash-empty">{!session ? 'Connect your Java account to load orders.' : 'No orders yet.'}</p>}
+      {!displayedOrders.length && <p className="dash-empty">{!session ? 'Your orders load automatically after sign-in.' : 'No orders yet.'}</p>}
       <div className="order-list">{displayedOrders.map(order => <article className="order-card" key={order.id}>
         <div className="dash-section-title"><h3>Order {order.id.slice(0, 8)}</h3><span className="dash-badge">{order.state}</span></div>
         <p>{restaurants.find(r => r.id === order.restaurantId)?.name || order.restaurantId}</p>
@@ -216,26 +204,15 @@ export default function DashboardPage({ email, onLogout, busy: authBusy, error: 
     <header className="dash-header">
       <div><p className="dash-brand">SugarRush <span>SIMULATOR</span></p><h1>City dashboard</h1><p className="dash-muted">Restaurants, orders, and activity in one workspace.</p></div>
       <div className="dash-account"><span>{email}</span>
-        <strong>{session ? `${session.user.username} · ${role}` : 'Java account not connected'}</strong>
+        <strong>{session ? `${session.user.username} · ${role}` : 'Loading your account...'}</strong>
         <button className="btn btn-secondary" disabled={disabled} onClick={signOut}>Sign out</button>
       </div>
     </header>
     {(error || authError) && <p className="form-alert" role="alert">{error || authError}</p>}
     <div className="dash-toolbar">
-      <p><span className={`connection-dot ${session ? 'connected' : ''}`} />{session ? 'Java order server connected' : 'Connect a Java demo account to load the city and use order controls.'}</p>
-      {session ? <>
-        <button className="btn btn-secondary" disabled={disabled} onClick={() => run(() => refresh(session))}>{busy ? 'Updating...' : 'Refresh city'}</button>
-        <button className="btn btn-secondary" disabled={disabled} onClick={switchSession}>Switch Java account</button>
-      </> : <button className="btn btn-primary" disabled={disabled} onClick={() => setShowConnection(current => !current)}>{showConnection ? 'Hide connection panel' : 'Connect demo account'}</button>}
+      <p><span className={`connection-dot ${session ? 'connected' : ''}`} />{busy ? 'Loading your workspace...' : session ? 'Your workspace is connected' : 'The order server is not connected.'}</p>
+      <button className="btn btn-secondary" disabled={disabled} onClick={() => session ? run(() => refresh(session)) : connectAccount()}>{busy ? 'Loading...' : session ? 'Refresh city' : 'Retry connection'}</button>
     </div>
-    {!session && showConnection && <section className="dash-card demo-login">
-      <h2>Connect to the Java demo</h2><p>Your existing Firebase login opens this dashboard. Java currently uses separate demo accounts for order permissions.</p>
-      <form className="connection-form" onSubmit={signIn}>
-        <label>Java username<input required autoComplete="username" value={username} onChange={e => setUsername(e.target.value)} /></label>
-        <label>Java password<input required type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} /></label>
-        <button className="btn btn-primary" disabled={disabled}>{busy ? 'Connecting...' : 'Open workspace'}</button>
-      </form><p className="dash-muted">customer / customer-demo · restaurant / restaurant-demo · operator / operator-demo · courier / courier-demo</p>
-    </section>}
     <nav className="module-tabs" role="tablist" aria-label="Simulator modules">
       {tabs.map((name, index) => <button key={name} id={`module-tab-${index}`} type="button" role="tab"
         aria-selected={tab === name} aria-controls="workspace-panel" tabIndex={tab === name ? 0 : -1}
@@ -253,7 +230,7 @@ export default function DashboardPage({ email, onLogout, busy: authBusy, error: 
       <aside className="dash-card restaurant-sidebar">
         <h2>Find a restaurant</h2>
         <label>Search restaurants<input type="search" placeholder="Search by restaurant name..." value={search} onChange={e => setSearch(e.target.value)} disabled={!session} /></label>
-        <p className="dash-muted">{session ? `${filteredRestaurants.length} restaurant${filteredRestaurants.length === 1 ? '' : 's'} found` : 'Connect to load restaurants.'}</p>
+        <p className="dash-muted">{session ? `${filteredRestaurants.length} restaurant${filteredRestaurants.length === 1 ? '' : 's'} found` : 'Loading restaurants for your account...'}</p>
         <div className="restaurant-list">{filteredRestaurants.map(r => <button type="button" key={r.id}
           disabled={disabled} className={`restaurant-option ${r.id === restaurantId ? 'selected-restaurant' : ''}`} aria-pressed={r.id === restaurantId}
           onClick={() => selectRestaurant(r.id)}>
@@ -281,8 +258,8 @@ export default function DashboardPage({ email, onLogout, busy: authBusy, error: 
         </>}
         {tab === 'Orders' && <>{role === 'COURIER' ? <section className="dash-card"><h2>Courier orders</h2><p>Courier assignments are not implemented yet.</p></section> : renderOrders()}{role === 'CUSTOMER' && renderMenu()}</>}
         {tab === 'Delivery' && <section className="dash-card module-placeholder"><span className="dash-badge">DLV · upcoming module</span><h2>Delivery workspace</h2><p>Courier assignment, pickup, and delivery controls will appear here when the delivery service is implemented.</p><p className="dash-muted">Phase II orders stop at Ready. This tab does not simulate completed deliveries.</p></section>}
-        {tab === 'Pricing & History' && <section className="dash-card"><div><h2>Order history</h2><p className="dash-muted">Orders visible to your Java account. Amounts are item subtotals; billing fees and charges are not implemented yet.</p></div>
-          {!orders.length ? <p className="dash-empty">{session ? 'No orders to display.' : 'Connect your Java account to load history.'}</p> : <div className="history-table-wrap"><table className="history-table"><thead><tr><th>Order</th><th>Restaurant</th><th>State</th><th>Item subtotal</th></tr></thead><tbody>{orders.map(o => <tr key={o.id}><td>{o.id.slice(0, 8)}</td><td>{restaurants.find(r => r.id === o.restaurantId)?.name || o.restaurantId}</td><td>{o.state}</td><td>{money(o.total)}</td></tr>)}</tbody></table></div>}
+        {tab === 'Pricing & History' && <section className="dash-card"><div><h2>Order history</h2><p className="dash-muted">Orders visible to your account. Amounts are item subtotals; billing fees and charges are not implemented yet.</p></div>
+          {!orders.length ? <p className="dash-empty">{session ? 'No orders to display.' : 'Your history loads automatically after sign-in.'}</p> : <div className="history-table-wrap"><table className="history-table"><thead><tr><th>Order</th><th>Restaurant</th><th>State</th><th>Item subtotal</th></tr></thead><tbody>{orders.map(o => <tr key={o.id}><td>{o.id.slice(0, 8)}</td><td>{restaurants.find(r => r.id === o.restaurantId)?.name || o.restaurantId}</td><td>{o.state}</td><td>{money(o.total)}</td></tr>)}</tbody></table></div>}
         </section>}
       </section>
     </div>

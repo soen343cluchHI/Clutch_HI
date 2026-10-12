@@ -91,7 +91,7 @@ function App() {
     if (profileError) return <StatusPage title="Profile unavailable" message={`Could not load your profile: ${profileError}`} busy={busy} error={error} onLogout={logout} />;
     if (!profile) return <ProfileSetupPage roles={roles} role={role} setRole={setRole} busy={busy} error={error} onSubmit={submit} onLogout={logout} />;
     if (!roles.includes(profile.role)) return <StatusPage title="Profile unavailable" message="Your profile has an invalid role. Contact the project team." busy={busy} error={error} onLogout={logout} />;
-    return <DashboardPage email={user.email} busy={busy} error={error} onLogout={logout} />;
+    return <DashboardPage key={user.uid} firebaseUser={user} profileRole={profile.role} email={user.email} busy={busy} error={error} onLogout={logout} />;
   }
 
   const isDashboard =
