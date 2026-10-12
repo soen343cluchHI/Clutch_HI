@@ -13,20 +13,33 @@ import java.util.*;
 import sugarrush.application.SugarRush;
 import sugarrush.application.commands.*;
 import sugarrush.domain.user.Session;
+import sugarrush.infrastructure.auth.FirebaseTokenVerifier;
+import java.nio.file.Files;
+import java.io.Reader;
 
 public final class ApiServer {
     private final SugarRush application;
-    private ApiServer(SugarRush application) { this.application = application; }
+    private final FirebaseTokenVerifier verifier;
+    ApiServer(SugarRush application, FirebaseTokenVerifier verifier) {
+        this.application = application; this.verifier = verifier;
+    }
 
     public static void main(String[] args) throws IOException {
         Path seed = Path.of(args.length > 0 ? args[0] : "backend/config/demo.properties");
         int port = args.length > 1 ? Integer.parseInt(args[1]) : 8080;
-        ApiServer api = new ApiServer(SugarRush.fromSeed(seed));
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
-        server.createContext("/api/", api::handle);
-        server.start();
+        Properties settings = new Properties();
+        try (Reader reader = Files.newBufferedReader(seed)) { settings.load(reader); }
+        String projectId = settings.getProperty("firebase.projectId", "soen343-f701c").trim();
+        ApiServer api = new ApiServer(SugarRush.fromSeed(seed), new FirebaseTokenVerifier(projectId));
+        HttpServer server = api.start(port);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop(0)));
         System.out.println("SugarRush backend: http://localhost:" + port);
+    }
+
+    HttpServer start(int port) throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+        server.createContext("/api/", this::handle);
+        server.start(); return server;
     }
 
     private void handle(HttpExchange exchange) throws IOException {
@@ -37,7 +50,7 @@ public final class ApiServer {
                 send(exchange, 200, Map.of("status", "UP", "service", "SugarRush backend"));
                 return;
             }
-            if (!path.equals("/api/login") && !path.equals("/api/command")) {
+            if (!path.equals("/api/firebase-session") && !path.equals("/api/command")) {
                 send(exchange, 404, Map.of("error", "Endpoint not found"));
                 return;
             }
@@ -53,17 +66,22 @@ public final class ApiServer {
                 return;
             }
             Map<String, String> fields = form(new String(body, StandardCharsets.UTF_8));
-            if (path.equals("/api/login")) {
-                Session session = application.login(required(fields, "username"), required(fields, "password"));
-                send(exchange, 200, session);
+            String authorization = exchange.getRequestHeaders().getFirst("Authorization");
+            FirebaseTokenVerifier.Identity identity;
+            try {
+                if (authorization == null || !authorization.startsWith("Bearer ")) {
+                    throw new SecurityException("Sign in required");
+                }
+                identity = verifier.verify(authorization.substring(7));
+            } catch (SecurityException failure) {
+                send(exchange, 401, Map.of("error", message(failure))); return;
+            }
+            Session session = application.firebaseSession(identity.uid(), identity.email());
+            String token = session.token();
+            if (path.equals("/api/firebase-session")) {
+                send(exchange, 200, application.execute(new Command(token, Action.SESSION_INFO)));
                 return;
             }
-            String authorization = exchange.getRequestHeaders().getFirst("Authorization");
-            if (authorization == null || !authorization.startsWith("Bearer ")) {
-                throw new SecurityException("Java session required");
-            }
-            String token = authorization.substring(7);
-            application.execute(new Command(token, Action.SESSION_INFO));
             Action action = Action.valueOf(required(fields, "action"));
             Map<String, Integer> items = new LinkedHashMap<>();
             for (var entry : fields.entrySet()) {
@@ -81,6 +99,8 @@ public final class ApiServer {
                 default -> throw new IllegalArgumentException("This endpoint does not support that command yet");
             };
             send(exchange, 200, application.execute(command));
+        } catch (FirebaseTokenVerifier.UnavailableException failure) {
+            send(exchange, 503, Map.of("error", message(failure)));
         } catch (SecurityException failure) {
             send(exchange, 403, Map.of("error", message(failure)));
         } catch (IllegalArgumentException | IllegalStateException failure) {
