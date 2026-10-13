@@ -202,17 +202,26 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
 
   return <main className="dashboard">
     <header className="dash-header">
-      <div><p className="dash-brand">SugarRush <span>SIMULATOR</span></p><h1>City dashboard</h1><p className="dash-muted">Restaurants, orders, and activity in one workspace.</p></div>
-      <div className="dash-account"><span>{email}</span>
-        <strong>{session ? `${session.user.username} · ${role}` : 'Loading your account...'}</strong>
-        <button className="btn btn-secondary" disabled={disabled} onClick={signOut}>Sign out</button>
+      <div>
+        <p className="dash-brand">SugarRush</p>
+      </div>
+      <div className="dash-account">
+        <strong>
+          {session
+            ? `${session.user.username} · ${role}`
+            : 'Loading your account...'}
+        </strong>
+        <button
+          className="btn btn-secondary"
+          disabled={disabled}
+          onClick={signOut}
+        >
+          Sign out
+        </button>
       </div>
     </header>
     {(error || authError) && <p className="form-alert" role="alert">{error || authError}</p>}
-    <div className="dash-toolbar">
-      <p><span className={`connection-dot ${session ? 'connected' : ''}`} />{busy ? 'Loading your workspace...' : session ? 'Your workspace is connected' : 'The order server is not connected.'}</p>
-      <button className="btn btn-secondary" disabled={disabled} onClick={() => session ? run(() => refresh(session)) : connectAccount()}>{busy ? 'Loading...' : session ? 'Refresh city' : 'Retry connection'}</button>
-    </div>
+
     <nav className="module-tabs" role="tablist" aria-label="Simulator modules">
       {tabs.map((name, index) => <button key={name} id={`module-tab-${index}`} type="button" role="tab"
         aria-selected={tab === name} aria-controls="workspace-panel" tabIndex={tab === name ? 0 : -1}
@@ -254,6 +263,11 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
           <div className="map-legend"><span><i className="queue-dot queue-short" />Short: 0–2 queued</span><span><i className="queue-dot queue-building" />Building: 3–5</span><span><i className="queue-dot queue-long" />Long: 6+ or paused</span></div>
           <p className="dash-muted">Schematic grid, not a live street map. Courier positions are not included in your current seed.</p>
           </section>
+          <div className="dash-toolbar">
+            <p><span className={`connection-dot ${session ? 'connected' : ''}`} />{busy ? 'Loading your workspace...' : session ? 'Your workspace is connected' : 'The order server is not connected.'}</p>
+            <button className="btn btn-secondary" disabled={disabled} onClick={() => session ? run(() => refresh(session)) : connectAccount()}>{busy ? 'Loading...' : session ? 'Refresh city' : 'Retry connection'}</button>
+          </div>
+
           {renderMenu()}
         </>}
         {tab === 'Orders' && <>{role === 'COURIER' ? <section className="dash-card"><h2>Courier orders</h2><p>Courier assignments are not implemented yet.</p></section> : renderOrders()}{role === 'CUSTOMER' && renderMenu()}</>}
