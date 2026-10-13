@@ -197,6 +197,17 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
         <ul>{order.lines.map(line => <li key={line.item.id}>{line.quantity} × {line.item.name}</li>)}</ul>
         <strong>{money(order.total)}</strong>
         {order.rejectionReason && <p>Reason: {order.rejectionReason}</p>}
+        {role === 'CUSTOMER' && order.state === 'Placed' && (
+          <div className="order-actions">
+            <button
+              className="btn btn-secondary"
+              disabled={disabled}
+              onClick={() => transition(order, 'CANCEL_ORDER')}
+            >
+              Cancel order
+            </button>
+          </div>
+        )}
         {role === 'RESTAURANT' && <div className="order-actions">
           {order.state === 'Placed' && <>
             <button className="btn btn-primary" disabled={disabled} onClick={() => transition(order, 'ACCEPT_ORDER')}>Accept</button>

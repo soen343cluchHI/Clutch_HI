@@ -8,6 +8,7 @@ public final class AuthorizationHandler extends CommandHandler {
  public AuthorizationHandler(RestaurantService restaurants,OrderService orders,CommandHandler next){super(next);this.restaurants=restaurants;this.orders=orders;}
  public Object handle(Command c,User user){
   if(!c.action().permits(user.role())) throw new SecurityException("Action not permitted for "+user.role());
+  if(c.action()==Action.CANCEL_ORDER && !orders.require(c.orderId()).customerId().equals(user.id())) throw new SecurityException("You can only cancel your own orders");
   String id=switch(c.action()){
    case ACCEPT_ORDER,REJECT_ORDER,START_PREPARING,MARK_READY->orders.require(c.orderId()).restaurantId();
    case RESTAURANT_QUEUE,SET_RESTAURANT_STATUS,PUT_MENU_ITEM->c.restaurantId();
