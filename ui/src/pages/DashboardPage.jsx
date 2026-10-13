@@ -50,7 +50,13 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
       for (const r of visible) nextQueues[r.id] = await send(current, 'RESTAURANT_QUEUE', { restaurantId: r.id });
       setQueues(nextQueues);
     }
-    setRestaurantId(previous => visible.some(r => r.id === previous) ? previous : visible[0]?.id || '');
+    setRestaurantId(previous =>
+      visible.some(r => r.id === previous)
+        ? previous
+        : current.user.role === 'RESTAURANT'
+          ? visible[0]?.id || ''
+          : ''
+    );
     setOrders(current.user.role === 'COURIER' ? [] : await send(current, 'LIST_ORDERS'));
   }
 
@@ -141,11 +147,13 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
   const tabs = ['Map', 'Orders', 'Delivery', 'Pricing & History'];
 
   function selectRestaurant(id) {
-    setRestaurantId(id);
+    setRestaurantId(previous => previous === id ? '' : id);
     setQuantities({});
-  }
-
+    setTab('Map');
+  } 
+  
   function renderMenu() {
+    if (!restaurant) return null;
     return <section className="dash-card restaurant-details">
       <div className="dash-section-title"><h2>{restaurant?.name || 'Restaurant details'}</h2>
         {restaurant && <span className={`status-tag status-${restaurant.status.toLowerCase()}`}>{restaurant.status}</span>}
