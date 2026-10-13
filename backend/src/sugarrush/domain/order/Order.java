@@ -23,6 +23,7 @@ public final class Order {
  public List<OrderLine> lines(){return lines;}
  public BigDecimal total(){return lines.stream().map(OrderLine::total).reduce(BigDecimal.ZERO,BigDecimal::add);}
  public OrderEvent placedEvent(){return new OrderEvent(UUID.randomUUID(),id,null,state(),Instant.now());}
+ public OrderEvent cancel(){return transition(state.cancel());}
  public OrderEvent accept(){return transition(state.accept());}
  public OrderEvent reject(String reason){
   if(reason==null || reason.isBlank()) throw new IllegalArgumentException("Rejection reason required");

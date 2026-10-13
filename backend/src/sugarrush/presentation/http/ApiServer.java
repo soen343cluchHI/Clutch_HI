@@ -92,7 +92,7 @@ public final class ApiServer {
             Command command = switch (action) {
                 case RESTAURANT_QUEUE -> new Command(token, action, required(fields, "restaurantId"), null, null, null, null, null);
                 case PLACE_ORDER -> Command.place(token, required(fields, "restaurantId"), items);
-                case ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY ->
+                case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY ->
                     Command.order(token, action, required(fields, "orderId"), fields.get("reason"));
                 case BROWSE_RESTAURANTS, LIST_ORDERS, SESSION_INFO, ROLE_MENU, LOGOUT,
                      DASHBOARD, EVENT_LOG, COMMAND_LOG -> new Command(token, action);

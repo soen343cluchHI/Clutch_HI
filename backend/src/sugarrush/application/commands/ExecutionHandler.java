@@ -21,7 +21,7 @@ public final class ExecutionHandler extends CommandHandler {
   case BROWSE_RESTAURANTS->restaurants.browse();
   case LIST_ORDERS->orders.visible(user);
   case PLACE_ORDER->orders.place(user,c.restaurantId(),c.items());
-  case ACCEPT_ORDER,REJECT_ORDER,START_PREPARING,MARK_READY->orders.transition(c.orderId(),c.action().name(),c.reason());
+  case CANCEL_ORDER,ACCEPT_ORDER,REJECT_ORDER,START_PREPARING,MARK_READY->orders.transition(c.orderId(),c.action().name(),c.reason());
   case RESTAURANT_QUEUE->restaurants.require(c.restaurantId()).queue().snapshot();
   case SET_RESTAURANT_STATUS->{restaurants.require(c.restaurantId()).changeStatus(c.status());yield "Status updated";}
   case PUT_MENU_ITEM->{
