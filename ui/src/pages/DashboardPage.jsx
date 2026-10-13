@@ -135,6 +135,8 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
 
   const normalise = value => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const filteredRestaurants = restaurants.filter(r => normalise(r.name).includes(normalise(search.trim())));
+  const hasSearch = search.trim().length > 0;
+  const featuredRestaurant = restaurants.find(r => r.id === 'sugar-shop');
   const restaurantOrders = orders.filter(o => o.restaurantId === restaurantId);
   const tabs = ['Map', 'Orders', 'Delivery', 'Pricing & History'];
 
@@ -238,15 +240,77 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
     <div className="simulator-workspace">
       <aside className="dash-card restaurant-sidebar">
         <h2>Find a restaurant</h2>
-        <label>Search restaurants<input type="search" placeholder="Search by restaurant name..." value={search} onChange={e => setSearch(e.target.value)} disabled={!session} /></label>
-        <p className="dash-muted">{session ? `${filteredRestaurants.length} restaurant${filteredRestaurants.length === 1 ? '' : 's'} found` : 'Loading restaurants for your account...'}</p>
-        <div className="restaurant-list">{filteredRestaurants.map(r => <button type="button" key={r.id}
-          disabled={disabled} className={`restaurant-option ${r.id === restaurantId ? 'selected-restaurant' : ''}`} aria-pressed={r.id === restaurantId}
-          onClick={() => selectRestaurant(r.id)}>
-          <span className={`queue-dot queue-${queueBand(r)}`} /><span><strong>{r.name}</strong><small>{r.status.toLowerCase()} · {r.queueLength ?? 0} queued</small></span>
-        </button>)}</div>
-        {session && !filteredRestaurants.length && <p className="dash-empty">No restaurants match your search.</p>}
-        <div className="sidebar-note"><strong>Phase II workspace</strong><p>Use Map to browse menus and Orders to follow or prepare an order.</p></div>
+
+        <label>
+          Search restaurants
+          <input
+            type="search"
+            placeholder="Search by restaurant name..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            disabled={!session}
+          />
+        </label>
+
+        {!session ? (
+          <p className="dash-muted">Loading restaurants...</p>
+        ) : hasSearch ? (
+          <>
+            <p className="dash-muted">
+              {filteredRestaurants.length} restaurant
+              {filteredRestaurants.length === 1 ? '' : 's'} found
+            </p>
+
+            <div className="restaurant-list">
+              {filteredRestaurants.map(r => (
+                <button
+                  type="button"
+                  key={r.id}
+                  disabled={disabled}
+                  className={`restaurant-option ${
+                    r.id === restaurantId ? 'selected-restaurant' : ''
+                  }`}
+                  aria-pressed={r.id === restaurantId}
+                  onClick={() => selectRestaurant(r.id)}
+                >
+                  <span className={`queue-dot queue-${queueBand(r)}`} />
+                  <span>
+                    <strong>{r.name}</strong>
+                    <small>{r.status.toLowerCase()}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {!filteredRestaurants.length && (
+              <p className="dash-empty">
+                No restaurants match your search.
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <h3>Restaurant of the week</h3>
+
+            {featuredRestaurant ? (
+              <button
+                type="button"
+                disabled={disabled}
+                className="restaurant-option"
+                onClick={() => selectRestaurant(featuredRestaurant.id)}
+              >
+                <span>
+                  <strong>{featuredRestaurant.name}</strong>
+                  <small>This week’s featured restaurant</small>
+                </span>
+              </button>
+            ) : (
+              <p className="dash-muted">
+                No featured restaurant this week.
+              </p>
+            )}
+          </>
+        )}
       </aside>
       <section className="workspace-panel" id="workspace-panel" role="tabpanel" aria-labelledby={`module-tab-${tabs.indexOf(tab)}`}>
         {tab === 'Map' && <>
