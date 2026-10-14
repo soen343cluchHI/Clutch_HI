@@ -1,0 +1,16 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "SugarRush: start everything",
+      "type": "process",
+      "command": "node",
+      "args": ["start.cjs"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "runOptions": { "runOn": "folderOpen", "instanceLimit": 1 },
+      "presentation": { "reveal": "silent", "panel": "dedicated" }
+    }
+  ]
+}

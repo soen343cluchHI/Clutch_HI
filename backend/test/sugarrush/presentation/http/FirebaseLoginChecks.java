@@ -1,0 +1,120 @@
+package sugarrush.presentation.http;
+
+import java.math.BigDecimal;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.*;
+import java.security.*;
+import java.time.*;
+import java.util.*;
+import sugarrush.application.SugarRush;
+import sugarrush.infrastructure.auth.FirebaseTokenVerifier;
+import sugarrush.infrastructure.json.Json;
+
+public final class FirebaseLoginChecks {
+    private static final String PROJECT = "soen343-f701c";
+    private static final long NOW = 1800000000L;
+    private static int checks;
+    private static KeyPair pair;
+    private static FirebaseTokenVerifier verifier;
+
+    public static void main(String[] args) throws Exception {
+        KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048); pair = generator.generateKeyPair();
+        verifier = new FirebaseTokenVerifier(PROJECT, () -> Map.of("test-key", pair.getPublic()),
+            Clock.fixed(Instant.ofEpochSecond(NOW), ZoneOffset.UTC));
+        String customer = token("customer-a", "a@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60);
+        check(verifier.verify(customer).uid().equals("customer-a"), "Signed UID lost");
+        rejected(() -> verifier.verify("unsigned"));
+        rejected(() -> verifier.verify(customer.substring(0, customer.lastIndexOf('.') + 1) + "invalid"));
+        rejected(() -> verifier.verify(token("a", "a@example.com", "other-project", NOW + 3600, NOW - 30, NOW - 60)));
+        rejected(() -> verifier.verify(token("a", "a@example.com", PROJECT, NOW, NOW - 30, NOW - 60)));
+        rejected(() -> verifier.verify(token("a", "a@example.com", PROJECT, NOW + 3600, NOW + 30, NOW - 60)));
+        rejected(() -> verifier.verify(token("a", "a@example.com", PROJECT, NOW + 3600, NOW - 30, NOW + 30)));
+        rejected(() -> verifier.verify(signed("{\"alg\":\"none\",\"kid\":\"test-key\"}", claims("a", "a@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60))));
+        rejected(() -> verifier.verify(signed("{\"alg\":\"RS256\",\"kid\":\"unknown\"}", claims("a", "a@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60))));
+        rejected(() -> verifier.verify(signed("{\"alg\":\"RS256\",\"kid\":\"test-key\"}", claims("a", "a@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60).replace("https://securetoken.google.com/", "https://forged.example/"))));
+        try { Json.object("{\"sub\":\"a\",\"sub\":\"b\"}"); throw new AssertionError("Duplicate JSON claims accepted"); }
+        catch (IllegalArgumentException expected) { checks++; }
+
+        Path seed = Files.createTempFile("firebase-login-checks", ".properties");
+        Files.writeString(seed, Files.readString(Path.of("backend/config/demo.properties")) +
+            "\nfirebase.user.staff-a.account=restaurant\nfirebase.user.admin-a.account=operator\n");
+        var server = new ApiServer(SugarRush.fromSeed(seed), verifier).start(0);
+        String base = "http://127.0.0.1:" + server.getAddress().getPort();
+        try {
+            Response missing = request(base, "/api/firebase-session", null, Map.of());
+            check(missing.status == 401, "Anonymous login accepted");
+            check(request(base, "/api/command", "fake", Map.of("action", "BROWSE_RESTAURANTS")).status == 401, "Fake token accepted");
+            check(request(base, "/api/login", null, Map.of("username", "customer", "password", "customer-demo")).status == 404, "Manual HTTP login still exposed");
+            Response identity = request(base, "/api/firebase-session", customer, Map.of("role", "OPERATOR", "username", "operator"));
+            check(identity.status == 200, "Automatic Firebase session failed");
+            check(identity.object().get("role").equals("CUSTOMER"), "Client role trusted");
+            check(identity.object().get("id").equals("firebase:customer-a"), "Shared demo customer used");
+            check(identity.object().get("username").equals("a@example.com"), "Firebase email lost");
+            Response browse = command(base, customer, "BROWSE_RESTAURANTS", Map.of());
+            check(browse.status == 200 && browse.array().size() == 2, "Authenticated menus missing");
+            Response order = command(base, customer, "PLACE_ORDER", Map.of("restaurantId", "sugar-shop", "item.cake", "2"));
+            check(order.status == 200, "Signed-in customer cannot place");
+            check(order.object().get("customerId").equals("firebase:customer-a"), "Wrong order owner");
+            String id = (String) order.object().get("id");
+            check(command(base, customer, "ACCEPT_ORDER", Map.of("orderId", id)).status == 403, "Customer can prepare orders");
+            String second = token("customer-b", "b@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60);
+            check(command(base, second, "LIST_ORDERS", Map.of()).array().isEmpty(), "Another customer sees private orders");
+            String renewed = token("customer-a", "a@example.com", PROJECT, NOW + 7200, NOW - 1, NOW - 60);
+            check(command(base, renewed, "LIST_ORDERS", Map.of()).array().size() == 1, "Token refresh changed identity");
+            String staff = token("staff-a", "staff@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60);
+            check(request(base, "/api/firebase-session", staff, Map.of()).object().get("role").equals("RESTAURANT"), "Approved staff mapping lost");
+            for (String action : List.of("ACCEPT_ORDER", "START_PREPARING", "MARK_READY")) {
+                check(command(base, staff, action, Map.of("orderId", id)).status == 200, "Staff lifecycle command failed");
+            }
+            check(command(base, customer, "LIST_ORDERS", Map.of()).body.contains("\"Ready\""), "Ready order not reflected");
+            String admin = token("admin-a", "admin@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60);
+            check(request(base, "/api/firebase-session", admin, Map.of()).object().get("role").equals("OPERATOR"), "Approved operator mapping lost");
+            check(command(base, admin, "EVENT_LOG", Map.of()).array().size() == 4, "Transition events missing");
+            check(command(base, customer, "EVENT_LOG", Map.of()).status == 403, "Customer received operator events");
+            check(command(base, customer, "LOGOUT", Map.of()).status == 200, "Internal logout failed");
+            check(command(base, renewed, "LIST_ORDERS", Map.of()).array().size() == 1, "Firebase re-login lost order ownership");
+            System.out.println("Passed " + checks + " Firebase identity, cryptographic and HTTP checks.");
+        } finally { server.stop(0); Files.deleteIfExists(seed); }
+    }
+
+    private record Response(int status, String body) {
+        Map<String, Object> object() { return Json.object(body); }
+        List<?> array() { return (List<?>) Json.object("{\"items\":" + body + "}").get("items"); }
+    }
+    private static Response command(String base, String token, String action, Map<String, String> fields) throws Exception {
+        Map<String, String> all = new LinkedHashMap<>(fields); all.put("action", action);
+        return request(base, "/api/command", token, all);
+    }
+    private static Response request(String base, String path, String token, Map<String, String> fields) throws Exception {
+        StringJoiner form = new StringJoiner("&");
+        fields.forEach((key, value) -> form.add(URLEncoder.encode(key, StandardCharsets.UTF_8) + "=" + URLEncoder.encode(value, StandardCharsets.UTF_8)));
+        var builder = HttpRequest.newBuilder(URI.create(base + path)).header("Content-Type", "application/x-www-form-urlencoded");
+        if (token != null) builder.header("Authorization", "Bearer " + token);
+        var response = HttpClient.newHttpClient().send(builder.POST(HttpRequest.BodyPublishers.ofString(form.toString())).build(), HttpResponse.BodyHandlers.ofString());
+        return new Response(response.statusCode(), response.body());
+    }
+    private static String claims(String uid, String email, String audience, long exp, long iat, long auth) {
+        return "{\"sub\":\"" + uid + "\",\"email\":\"" + email + "\",\"aud\":\"" + audience +
+            "\",\"iss\":\"https://securetoken.google.com/" + PROJECT + "\",\"exp\":" + exp + ",\"iat\":" + iat + ",\"auth_time\":" + auth + "}";
+    }
+    private static String token(String uid, String email, String audience, long exp, long iat, long auth) throws Exception {
+        return signed("{\"alg\":\"RS256\",\"kid\":\"test-key\"}", claims(uid, email, audience, exp, iat, auth));
+    }
+    private static String signed(String header, String claims) throws Exception {
+        Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
+        String data = encoder.encodeToString(header.getBytes(StandardCharsets.UTF_8)) + "." + encoder.encodeToString(claims.getBytes(StandardCharsets.UTF_8));
+        Signature signature = Signature.getInstance("SHA256withRSA");
+        signature.initSign(pair.getPrivate()); signature.update(data.getBytes(StandardCharsets.US_ASCII));
+        return data + "." + encoder.encodeToString(signature.sign());
+    }
+    @FunctionalInterface private interface Task { void run() throws Exception; }
+    private static void rejected(Task task) throws Exception {
+        try { task.run(); throw new AssertionError("Invalid token accepted"); }
+        catch (SecurityException expected) { checks++; }
+    }
+    private static void check(boolean condition, String message) { checks++; if (!condition) throw new AssertionError(message); }
+}

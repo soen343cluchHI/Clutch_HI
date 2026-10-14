@@ -1,6 +1,7 @@
 package sugarrush.domain.order;
 public interface OrderState {
  String name();
+ default OrderState cancel(){throw invalid("cancel");}
  default OrderState accept(){throw invalid("accept");}
  default OrderState reject(){throw invalid("reject");}
  default OrderState prepare(){throw invalid("prepare");}

@@ -34,6 +34,7 @@ public final class OrderService {
  public View transition(String id,String action,String reason){
   Order order=require(id);Restaurant r=restaurants.require(order.restaurantId());OrderEvent event;
   switch(action){
+   case "CANCEL_ORDER"->event=order.cancel();
    case "ACCEPT_ORDER"->{event=order.accept();r.queue().add(id);}
    case "REJECT_ORDER"->event=order.reject(reason);
    case "START_PREPARING"->{r.queue().requireHead(id);event=order.prepare();}

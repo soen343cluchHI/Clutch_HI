@@ -6,7 +6,7 @@ import { auth, database, configurationError } from './firebase';
 import AuthLayout from './components/AuthLayout';
 import AuthPage from './pages/AuthPage';
 import ProfileSetupPage from './pages/ProfileSetupPage';
-import AccountPage from './pages/AccountPage';
+import DashboardPage from './pages/DashboardPage';
 import StatusPage from './pages/StatusPage';
 import '@fontsource-variable/geist';
 import './styles/theme.css';
@@ -91,10 +91,18 @@ function App() {
     if (profileError) return <StatusPage title="Profile unavailable" message={`Could not load your profile: ${profileError}`} busy={busy} error={error} onLogout={logout} />;
     if (!profile) return <ProfileSetupPage roles={roles} role={role} setRole={setRole} busy={busy} error={error} onSubmit={submit} onLogout={logout} />;
     if (!roles.includes(profile.role)) return <StatusPage title="Profile unavailable" message="Your profile has an invalid role. Contact the project team." busy={busy} error={error} onLogout={logout} />;
-    return <AccountPage email={user.email} role={profile.role} busy={busy} error={error} onLogout={logout} />;
+    return <DashboardPage key={user.uid} firebaseUser={user} profileRole={profile.role} email={user.email} busy={busy} error={error} onLogout={logout} />;
   }
 
-  return <AuthLayout>{screen()}</AuthLayout>;
+  const isDashboard =
+  !configurationError &&
+  !loading &&
+  user &&
+  profile &&
+  !profileError &&
+  roles.includes(profile.role);
+
+return isDashboard ? screen() : <AuthLayout>{screen()}</AuthLayout>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);
