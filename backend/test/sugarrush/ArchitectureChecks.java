@@ -34,17 +34,20 @@ public final class ArchitectureChecks {
   }
   check(!Action.menu(Role.COURIER).contains(Action.PLACE_ORDER),"Courier must not place orders");
   check(!Action.menu(Role.OPERATOR).contains(Action.ACCEPT_ORDER),"Operator must not accept orders");
+  // Arrange the preconditions here instead of relying on the demo seed's starting state.
+  app.execute(new Command(staff.token(),Action.PUT_MENU_ITEM,"sugar-shop",null,null,null,null,new MenuItem("cookie","Cookie",new BigDecimal("3.00"),MenuItem.Status.SOLD_OUT)));
+  app.execute(new Command(other.token(),Action.SET_RESTAURANT_STATUS,"other-shop",null,null,null,Restaurant.Status.PAUSED,null));
   List<?> restaurants=(List<?>)app.execute(new Command(customer.token(),Action.BROWSE_RESTAURANTS));
   check(restaurants.size()==2,"Paused restaurant must remain visible");
   RestaurantService.View shop=(RestaurantService.View)restaurants.get(0);
-  check(shop.menu().size()==2,"Sold-out items must remain visible");
+  check(shop.menu().stream().anyMatch(i->i.id().equals("cookie")),"Sold-out items must remain visible");
   expect(UnsupportedOperationException.class,()->shop.menu().clear());
   expect(IllegalArgumentException.class,()->app.execute(Command.place(customer.token(),"sugar-shop",Map.of("cookie",1))));
   expect(IllegalArgumentException.class,()->app.execute(Command.place(customer.token(),"sugar-shop",Map.of("cake",0))));
   expect(IllegalArgumentException.class,()->app.execute(Command.place(customer.token(),"sugar-shop",Map.of("cake",-1))));
   expect(IllegalArgumentException.class,()->app.execute(Command.place(customer.token(),"sugar-shop",Map.of())));
   expect(IllegalArgumentException.class,()->app.execute(Command.place(customer.token(),"sugar-shop",Map.of("icecream",1))));
-  expect(IllegalStateException.class,()->app.execute(Command.place(customer.token(),"other-shop",Map.of("icecream",1))));
+  expect(IllegalStateException.class,()->app.execute(Command.place(customer.token(),"other-shop",Map.of("vanilla",1))));
   expect(SecurityException.class,()->app.execute(Command.place(courier.token(),"sugar-shop",Map.of("cake",1))));
   OrderService.View first=place(app,customer.token());
   OrderService.View second=place(app,customer.token());
