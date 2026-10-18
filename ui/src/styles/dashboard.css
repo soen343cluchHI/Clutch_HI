@@ -116,3 +116,5 @@
   .map-legend { gap: 10px; }
   .city-metrics > div { padding: 12px; }
 }
+
+.simulator-workspace.workspace-full-width { grid-template-columns: minmax(0, 1fr); }

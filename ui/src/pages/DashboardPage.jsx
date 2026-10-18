@@ -1,14 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
 import SimulatorMap, { queueBand } from '../components/SimulatorMap';
 import * as api from '../services/dashboardApi';
+import { canExecute, loadWorkspace, workspaceActions } from '../services/dashboardWorkspace';
 import '../styles/dashboard.css';
+
+const roleTabs = {
+  CUSTOMER: ['Map', 'Orders', 'History'],
+  RESTAURANT: ['Restaurant', 'Orders'],
+  OPERATOR: ['Orders', 'Map', 'History'],
+  COURIER: ['Workspace', 'Map'],
+};
 
 const money = value => new Intl.NumberFormat('en-CA', {
   style: 'currency', currency: 'CAD',
 }).format(value);
 
-export default function DashboardPage({ firebaseUser, profileRole, email, onLogout, busy: authBusy, error: authError }) {
-  const [tab, setTab] = useState('Map');
+export default function DashboardPage({ firebaseUser, email, onLogout, busy: authBusy, error: authError }) {
+  const [tab, setTab] = useState(null);
   const [search, setSearch] = useState('');
   const [showLabels, setShowLabels] = useState(true);
   const [session, setSession] = useState(null);
@@ -31,6 +39,9 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
 
   async function send(current, action, fields = {}) {
     try {
+      if (current.actions && !canExecute(current, action)) {
+        throw new Error(`The current workspace does not support ${action}.`);
+      }
       const result = await api.command(current, action, fields);
       log(action, true, result?.state ? `Order ${result.id.slice(0, 8)} → ${result.state}` : 'Completed');
       return result;
@@ -41,15 +52,9 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
   }
 
   async function refresh(current) {
-    const all = await send(current, 'BROWSE_RESTAURANTS');
-    const visible = current.user.role === 'RESTAURANT'
-      ? all.filter(r => r.ownerId === current.user.id) : all;
+    const { restaurants: visible, orders: visibleOrders, queues: nextQueues } = await loadWorkspace(current, send);
     setRestaurants(visible);
-    if (current.user.role === 'RESTAURANT') {
-      const nextQueues = {};
-      for (const r of visible) nextQueues[r.id] = await send(current, 'RESTAURANT_QUEUE', { restaurantId: r.id });
-      setQueues(nextQueues);
-    }
+    setQueues(nextQueues);
     setRestaurantId(previous =>
       visible.some(r => r.id === previous)
         ? previous
@@ -57,7 +62,7 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
           ? visible[0]?.id || ''
           : ''
     );
-    setOrders(current.user.role === 'COURIER' ? [] : await send(current, 'LIST_ORDERS'));
+    setOrders(visibleOrders);
   }
 
   async function run(task) {
@@ -72,25 +77,34 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
 
   async function connectAccount() {
     await run(async () => {
+      setSession(null);
+      setTab(null);
+      setSearch('');
+      setRestaurants([]);
+      setOrders([]);
+      setQueues({});
+      setRestaurantId('');
+      setQuantities({});
+      setReasons({});
       let current;
       try {
         current = await api.connect(firebaseUser);
-        if (profileRole && current.user.role !== profileRole.toUpperCase()) {
-          throw new Error('Your account role has not been approved for this workspace yet. Contact your project administrator.');
-        }
         log('SESSION_INFO', true, `Authenticated as ${current.user.username} (${current.user.role})`);
       } catch (failure) {
         log('SESSION_INFO', false, failure.message);
         throw failure;
       }
-      await refresh(current);
+      const menu = await send(current, 'ROLE_MENU');
+      current = { ...current, actions: workspaceActions(menu) };
+      setTab(roleTabs[current.user.role]?.[0] ?? null);
       setSession(current);
+      await refresh(current);
     });
   }
 
   useEffect(() => {
     connectAccount();
-  }, [firebaseUser, profileRole]);
+  }, [firebaseUser]);
 
   function place(event) {
     event.preventDefault();
@@ -144,12 +158,19 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
   const hasSearch = search.trim().length > 0;
   const featuredRestaurant = restaurants.find(r => r.id === 'sugar-shop');
   const restaurantOrders = orders.filter(o => o.restaurantId === restaurantId);
-  const tabs = ['Map', 'Orders', 'Delivery', 'Pricing & History'];
+  const tabs = roleTabs[role] || [];
+  const activeTab = tabs.includes(tab) ? tab : tabs[0];
+  const showSidebar = role === 'RESTAURANT' || (role === 'CUSTOMER' && activeTab === 'Map');
+  const tabLabel = name => name === 'Map'
+    ? role === 'CUSTOMER' ? 'Browse restaurants' : 'Map'
+    : name === 'Orders'
+      ? role === 'CUSTOMER' ? 'My orders' : role === 'OPERATOR' ? 'All orders' : 'Restaurant orders'
+      : name;
 
   function selectRestaurant(id) {
     setRestaurantId(previous => previous === id ? '' : id);
     setQuantities({});
-    setTab('Map');
+    setTab(role === 'RESTAURANT' ? 'Restaurant' : 'Map');
   } 
   
   function renderMenu() {
@@ -243,10 +264,10 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
     </header>
     {(error || authError) && <p className="form-alert" role="alert">{error || authError}</p>}
 
-    <nav className="module-tabs" role="tablist" aria-label="Simulator modules">
+    {session && <nav className="module-tabs" role="tablist" aria-label="Workspace sections">
       {tabs.map((name, index) => <button key={name} id={`module-tab-${index}`} type="button" role="tab"
-        aria-selected={tab === name} aria-controls="workspace-panel" tabIndex={tab === name ? 0 : -1}
-        className={tab === name ? 'active-tab' : ''} onClick={() => setTab(name)}
+        aria-selected={activeTab === name} aria-controls="workspace-panel" tabIndex={activeTab === name ? 0 : -1}
+        className={activeTab === name ? 'active-tab' : ''} onClick={() => setTab(name)}
         onKeyDown={e => {
           let next;
           if (e.key === 'ArrowRight') next = (index + 1) % tabs.length;
@@ -254,13 +275,17 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
           if (e.key === 'Home') next = 0;
           if (e.key === 'End') next = tabs.length - 1;
           if (next !== undefined) { e.preventDefault(); setTab(tabs[next]); e.currentTarget.parentElement.children[next].focus(); }
-        }}>{name}</button>)}
-    </nav>
-    <div className="simulator-workspace">
-      <aside className="dash-card restaurant-sidebar">
-        <h2>Find a restaurant</h2>
+        }}>{tabLabel(name)}</button>)}
+    </nav>}
+    <div className="dash-toolbar">
+      <p><span className={`connection-dot ${session ? 'connected' : ''}`} />{busy ? 'Loading your workspace...' : session ? 'Your workspace is connected' : 'The order server is not connected.'}</p>
+      <button className="btn btn-secondary" disabled={disabled} onClick={() => session ? run(() => refresh(session)) : connectAccount()}>{busy ? 'Loading...' : session ? 'Refresh workspace' : 'Retry connection'}</button>
+    </div>
+    <div className={`simulator-workspace${showSidebar ? '' : ' workspace-full-width'}`}>
+      {showSidebar && <aside className="dash-card restaurant-sidebar">
+        <h2>{role === 'RESTAURANT' ? 'Your restaurants' : 'Find a restaurant'}</h2>
 
-        <label>
+        {role === 'CUSTOMER' && <label>
           Search restaurants
           <input
             type="search"
@@ -269,11 +294,11 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
             onChange={e => setSearch(e.target.value)}
             disabled={!session}
           />
-        </label>
+        </label>}
 
         {!session ? (
           <p className="dash-muted">Loading restaurants...</p>
-        ) : hasSearch ? (
+        ) : hasSearch || role === 'RESTAURANT' ? (
           <>
             <p className="dash-muted">
               {filteredRestaurants.length} restaurant
@@ -330,9 +355,9 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
             )}
           </>
         )}
-      </aside>
-      <section className="workspace-panel" id="workspace-panel" role="tabpanel" aria-labelledby={`module-tab-${tabs.indexOf(tab)}`}>
-        {tab === 'Map' && <>
+      </aside>}
+      <section className="workspace-panel" id="workspace-panel" role={session ? 'tabpanel' : undefined} aria-labelledby={session ? `module-tab-${tabs.indexOf(activeTab)}` : undefined}>
+        {activeTab === 'Map' && <>
           <div className="city-metrics">
             <div><span>Restaurants</span><strong>{session ? restaurants.length : '—'}</strong></div>
             <div><span>Open now</span><strong>{session ? restaurants.filter(r => r.status === 'OPEN').length : '—'}</strong></div>
@@ -346,16 +371,13 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
           <div className="map-legend"><span><i className="queue-dot queue-short" />Short: 0–2 queued</span><span><i className="queue-dot queue-building" />Building: 3–5</span><span><i className="queue-dot queue-long" />Long: 6+ or paused</span></div>
           <p className="dash-muted">Schematic grid, not a live street map. Courier positions are not included in your current seed.</p>
           </section>
-          <div className="dash-toolbar">
-            <p><span className={`connection-dot ${session ? 'connected' : ''}`} />{busy ? 'Loading your workspace...' : session ? 'Your workspace is connected' : 'The order server is not connected.'}</p>
-            <button className="btn btn-secondary" disabled={disabled} onClick={() => session ? run(() => refresh(session)) : connectAccount()}>{busy ? 'Loading...' : session ? 'Refresh city' : 'Retry connection'}</button>
-          </div>
 
           {renderMenu()}
         </>}
-        {tab === 'Orders' && <>{role === 'COURIER' ? <section className="dash-card"><h2>Courier orders</h2><p>Courier assignments are not implemented yet.</p></section> : renderOrders()}{role === 'CUSTOMER' && renderMenu()}</>}
-        {tab === 'Delivery' && <section className="dash-card module-placeholder"><span className="dash-badge">DLV · upcoming module</span><h2>Delivery workspace</h2><p>Courier assignment, pickup, and delivery controls will appear here when the delivery service is implemented.</p><p className="dash-muted">Phase II orders stop at Ready. This tab does not simulate completed deliveries.</p></section>}
-        {tab === 'Pricing & History' && <section className="dash-card"><div><h2>Order history</h2><p className="dash-muted">Orders visible to your account. Amounts are item subtotals; billing fees and charges are not implemented yet.</p></div>
+        {activeTab === 'Restaurant' && renderMenu()}
+        {activeTab === 'Orders' && <>{renderOrders()}{role === 'CUSTOMER' && renderMenu()}</>}
+        {activeTab === 'Workspace' && <section className="dash-card"><h2>Courier orders</h2><p>Courier assignments are not implemented yet.</p></section>}
+        {activeTab === 'History' && <section className="dash-card"><div><h2>Order history</h2><p className="dash-muted">Orders visible to your account. Amounts are item subtotals; billing fees and charges are not implemented yet.</p></div>
           {!orders.length ? <p className="dash-empty">{session ? 'No orders to display.' : 'Your history loads automatically after sign-in.'}</p> : <div className="history-table-wrap"><table className="history-table"><thead><tr><th>Order</th><th>Restaurant</th><th>State</th><th>Item subtotal</th></tr></thead><tbody>{orders.map(o => <tr key={o.id}><td>{o.id.slice(0, 8)}</td><td>{restaurants.find(r => r.id === o.restaurantId)?.name || o.restaurantId}</td><td>{o.state}</td><td>{money(o.total)}</td></tr>)}</tbody></table></div>}
         </section>}
       </section>
