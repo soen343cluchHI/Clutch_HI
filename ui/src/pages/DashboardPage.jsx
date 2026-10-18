@@ -7,7 +7,7 @@ const money = value => new Intl.NumberFormat('en-CA', {
   style: 'currency', currency: 'CAD',
 }).format(value);
 
-export default function DashboardPage({ firebaseUser, profileRole, email, onLogout, busy: authBusy, error: authError }) {
+export default function DashboardPage({ firebaseUser, email, onLogout, busy: authBusy, error: authError }) {
   const [tab, setTab] = useState('Map');
   const [search, setSearch] = useState('');
   const [showLabels, setShowLabels] = useState(true);
@@ -75,9 +75,6 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
       let current;
       try {
         current = await api.connect(firebaseUser);
-        if (profileRole && current.user.role !== profileRole.toUpperCase()) {
-          throw new Error('Your account role has not been approved for this workspace yet. Contact your project administrator.');
-        }
         log('SESSION_INFO', true, `Authenticated as ${current.user.username} (${current.user.role})`);
       } catch (failure) {
         log('SESSION_INFO', false, failure.message);
@@ -90,7 +87,7 @@ export default function DashboardPage({ firebaseUser, profileRole, email, onLogo
 
   useEffect(() => {
     connectAccount();
-  }, [firebaseUser, profileRole]);
+  }, [firebaseUser]);
 
   function place(event) {
     event.preventDefault();
