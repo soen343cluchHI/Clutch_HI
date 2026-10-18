@@ -10,5 +10,6 @@ public final class PreparationQueue {
   if(!Objects.equals(orders.peekFirst(), id)) throw new IllegalStateException("Prepare in arrival order");
  }
  public void complete(String id) { requireHead(id); orders.removeFirst(); }
+ public void remove(String id) { orders.remove(id); }
  public List<String> snapshot() { return List.copyOf(orders); }
 }

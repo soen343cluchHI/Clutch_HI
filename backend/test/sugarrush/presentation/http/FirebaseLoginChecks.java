@@ -90,6 +90,28 @@ public final class FirebaseLoginChecks {
             check(command(base, second, "PLACE_ORDER", Map.of("restaurantId", "other-shop", "item.vanilla", "1")).status == 400, "Closed restaurant accepted a new order");
             check(command(base, admin, "SET_RESTAURANT_STATUS", Map.of("restaurantId", "sugar-shop", "status", "OPEN")).status == 200, "Operator cannot reopen any restaurant");
             check(command(base, second, "PLACE_ORDER", Map.of("restaurantId", "sugar-shop", "item.cake", "1")).status == 200, "Reopened restaurant rejected an order");
+            List<String> queued = new ArrayList<>();
+            for (int i = 0; i < 4; i++) {
+                String placed = (String) command(base, second, "PLACE_ORDER", Map.of("restaurantId", "sugar-shop", "item.cake", "1")).object().get("id");
+                check(command(base, staff, "ACCEPT_ORDER", Map.of("orderId", placed)).status == 200, "Staff cannot accept order");
+                queued.add(placed);
+            }
+            check(command(base, admin, "CANCEL_ORDER", Map.of("orderId", queued.get(1))).status == 200, "Operator cannot cancel accepted order");
+            check(command(base, staff, "RESTAURANT_QUEUE", Map.of("restaurantId", "sugar-shop")).array().equals(List.of(queued.get(0), queued.get(2), queued.get(3))), "Cancellation broke queue order");
+            check(command(base, staff, "START_PREPARING", Map.of("orderId", queued.get(0))).status == 200, "Staff cannot start preparing");
+            check(command(base, admin, "CANCEL_ORDER", Map.of("orderId", queued.get(0))).status == 200, "Operator cannot cancel preparing order");
+            check(command(base, staff, "START_PREPARING", Map.of("orderId", queued.get(2))).status == 200, "Next queued order blocked after cancellation");
+            check(command(base, staff, "MARK_READY", Map.of("orderId", queued.get(2))).status == 200, "Staff cannot mark ready");
+            check(command(base, admin, "CANCEL_ORDER", Map.of("orderId", queued.get(2))).status == 400, "Ready order cancelled");
+            check(command(base, admin, "CANCEL_ORDER", Map.of("orderId", queued.get(1))).status == 400, "Cancelled order cancelled twice");
+            check(command(base, second, "CANCEL_ORDER", Map.of("orderId", queued.get(3))).status == 403, "Customer cancelled accepted order");
+            check(command(base, staff, "CANCEL_ORDER", Map.of("orderId", queued.get(3))).status == 403, "Staff cancelled order");
+            String fresh = (String) command(base, second, "PLACE_ORDER", Map.of("restaurantId", "sugar-shop", "item.cake", "1")).object().get("id");
+            check(command(base, admin, "CANCEL_ORDER", Map.of("orderId", fresh)).status == 403, "Operator cancelled placed order");
+            check(command(base, second, "CANCEL_ORDER", Map.of("orderId", fresh)).status == 200, "Customer cannot cancel placed order");
+            List<?> events = command(base, admin, "EVENT_LOG", Map.of()).array();
+            check(events.stream().map(e -> ((Map<?, ?>) e).get("eventId")).distinct().count() == events.size(), "Duplicate event ID");
+            check(events.stream().filter(e -> "Cancelled".equals(((Map<?, ?>) e).get("newState"))).count() == 3, "Cancellation events missing");
             check(command(base, customer, "LOGOUT", Map.of()).status == 200, "Internal logout failed");
             check(command(base, renewed, "LIST_ORDERS", Map.of()).array().size() == 1, "Firebase re-login lost order ownership");
             System.out.println("Passed " + checks + " Firebase identity, cryptographic and HTTP checks.");

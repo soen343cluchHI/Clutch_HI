@@ -231,7 +231,8 @@ export default function DashboardPage({ firebaseUser, email, onLogout, busy: aut
         <ul>{order.lines.map(line => <li key={line.item.id}>{line.quantity} × {line.item.name}</li>)}</ul>
         <strong>{money(order.total)}</strong>
         {order.rejectionReason && <p>Reason: {order.rejectionReason}</p>}
-        {role === 'CUSTOMER' && order.state === 'Placed' && (
+        {((role === 'CUSTOMER' && order.state === 'Placed')
+          || (role === 'OPERATOR' && ['Accepted', 'Preparing'].includes(order.state))) && (
           <div className="order-actions">
             <button
               className="btn btn-secondary"

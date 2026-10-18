@@ -111,6 +111,13 @@ public final class ArchitectureChecks {
   order.accept();order.prepare();order.ready();order.pickUp();order.deliver();
   expect(IllegalStateException.class,order::pickUp);
   check(order.state().equals("Delivered"),"Delivery state pattern incomplete");
+  expect(IllegalStateException.class,order::cancel);
+  Order cancelled=new Order("o2","c",r,List.of(new OrderLine(item,1)));
+  cancelled.accept();cancelled.prepare();cancelled.cancel();
+  expect(IllegalStateException.class,cancelled::cancel);
+  PreparationQueue queue=new PreparationQueue();
+  queue.add("a");queue.add("b");queue.add("c");queue.remove("b");
+  check(queue.snapshot().equals(List.of("a","c")),"Cancellation broke arrival order");
   Restaurant wrong=new Restaurant("wrong","owner","Other",0,0,Restaurant.Status.OPEN);
   expect(IllegalArgumentException.class,()->new Order("bad","c",wrong,List.of(new OrderLine(item,1))));
   OrderEventPublisher publisher=new OrderEventPublisher();
