@@ -7,13 +7,13 @@ const root = __dirname;
 const java = process.env.SUGARRUSH_JAVA || 'java';
 const children = new Set();
 let stopping = false;
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function sources(folder) {
   const result = [];
   for (const entry of await fs.readdir(folder, { withFileTypes: true })) {
     const file = path.join(folder, entry.name);
-    if (entry.isDirectory()) result.push(...await sources(file));
+    if (entry.isDirectory()) result.push(...(await sources(file)));
     else if (entry.name.endsWith('.java')) result.push(file);
   }
   return result;
@@ -21,7 +21,10 @@ async function sources(folder) {
 
 function spawnOwned(command, args, options = {}) {
   const child = spawn(command, args, {
-    cwd: root, stdio: 'inherit', detached: process.platform !== 'win32', ...options,
+    cwd: root,
+    stdio: 'inherit',
+    detached: process.platform !== 'win32',
+    ...options,
   });
   children.add(child);
   child.once('close', () => children.delete(child));
@@ -30,8 +33,10 @@ function spawnOwned(command, args, options = {}) {
 
 function finish(child, name) {
   return new Promise((resolve, reject) => {
-    child.once('error', error => reject(new Error(`${name} could not start: ${error.message}`)));
-    child.once('exit', code => code === 0 ? resolve() : reject(new Error(`${name} stopped with exit code ${code}.`)));
+    child.once('error', (error) => reject(new Error(`${name} could not start: ${error.message}`)));
+    child.once('exit', (code) =>
+      code === 0 ? resolve() : reject(new Error(`${name} stopped with exit code ${code}.`)),
+    );
   });
 }
 
@@ -43,7 +48,7 @@ async function freePort(start = 8080) {
   for (let port = start; port < start + 100; port++) {
     const available = await new Promise((resolve, reject) => {
       const probe = net.createServer();
-      probe.once('error', error => error.code === 'EADDRINUSE' ? resolve(false) : reject(error));
+      probe.once('error', (error) => (error.code === 'EADDRINUSE' ? resolve(false) : reject(error)));
       probe.listen(port, '127.0.0.1', () => probe.close(() => resolve(true)));
     });
     if (available) return port;
@@ -54,9 +59,12 @@ async function freePort(start = 8080) {
 async function waitForBackend(child, port) {
   const deadline = Date.now() + 30000;
   while (Date.now() < deadline) {
-    if (child.exitCode !== null || child.signalCode !== null) throw new Error('Java stopped before the backend was ready.');
+    if (child.exitCode !== null || child.signalCode !== null)
+      throw new Error('Java stopped before the backend was ready.');
     try {
-      const health = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(2000) });
+      const health = await fetch(`http://127.0.0.1:${port}/api/health`, {
+        signal: AbortSignal.timeout(2000),
+      });
       const state = await health.json();
       const login = await fetch(`http://127.0.0.1:${port}/api/firebase-session`, { signal: AbortSignal.timeout(2000) });
       if (health.ok && state.status === 'UP' && login.status === 405) return;
@@ -72,12 +80,15 @@ async function waitForBackend(child, port) {
 async function stopChild(child) {
   if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
   if (process.platform === 'win32') {
-    await new Promise(resolve => {
+    await new Promise((resolve) => {
       const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
-      killer.once('error', resolve); killer.once('exit', resolve);
+      killer.once('error', resolve);
+      killer.once('exit', resolve);
     });
   } else {
-    try { process.kill(-child.pid, 'SIGTERM'); } catch {}
+    try {
+      process.kill(-child.pid, 'SIGTERM');
+    } catch {}
   }
 }
 
@@ -93,10 +104,20 @@ async function start() {
   const output = path.join(root, 'backend', 'out');
   await fs.mkdir(output, { recursive: true });
   console.log('Compiling the Java backend...');
-  await finish(spawnOwned(java, [
-    '-m', 'jdk.compiler/com.sun.tools.javac.Main', '--release', '17',
-    '--add-modules', 'jdk.httpserver', '-d', output, ...sourceFiles,
-  ]), 'Java compilation');
+  await finish(
+    spawnOwned(java, [
+      '-m',
+      'jdk.compiler/com.sun.tools.javac.Main',
+      '--release',
+      '17',
+      '--add-modules',
+      'jdk.httpserver',
+      '-d',
+      output,
+      ...sourceFiles,
+    ]),
+    'Java compilation',
+  );
 
   const ui = path.join(root, 'ui');
   try {
@@ -107,25 +128,49 @@ async function start() {
   }
 
   const port = await freePort(8080);
+  const envFile = await fs.readFile(path.join(ui, '.env.local'), 'utf8').catch(() => '');
+  const databaseUrl = process.env.VITE_FIREBASE_DATABASE_URL || envFile.match(/^VITE_FIREBASE_DATABASE_URL=(.*)$/m)?.[1]?.trim()?.replace(/^['"]|['"]$/g, '');
   const backend = spawnOwned(java, [
-    '--add-modules', 'jdk.httpserver', '-cp', output,
-    'sugarrush.presentation.http.ApiServer', 'backend/config/demo.properties', String(port),
-  ]);
-  backend.once('error', error => { console.error(error.message); shutdown(1); });
-  backend.once('exit', code => { if (!stopping) { console.error('Java stopped.'); shutdown(code || 1); } });
+    '--add-modules',
+    'jdk.httpserver',
+    '-cp',
+    output,
+    'sugarrush.presentation.http.ApiServer',
+    'backend/config/live.properties',
+    String(port),
+  ], { env: { ...process.env, SUGARRUSH_DATABASE_URL: databaseUrl || '' } });
+  backend.once('error', (error) => {
+    console.error(error.message);
+    shutdown(1);
+  });
+  backend.once('exit', (code) => {
+    if (!stopping) {
+      console.error('Java stopped.');
+      shutdown(code || 1);
+    }
+  });
   await waitForBackend(backend, port);
   console.log(`Java is ready on port ${port}. Starting the dashboard and opening your browser...`);
   const frontend = npmCommand('run dev -- --open', ui, {
-    ...process.env, SUGARRUSH_API_URL: `http://127.0.0.1:${port}`,
+    ...process.env,
+    SUGARRUSH_API_URL: `http://127.0.0.1:${port}`,
   });
-  frontend.once('error', error => { console.error(error.message); shutdown(1); });
-  frontend.once('exit', code => { if (!stopping) shutdown(code || 0); });
+  frontend.once('error', (error) => {
+    console.error(error.message);
+    shutdown(1);
+  });
+  frontend.once('exit', (code) => {
+    if (!stopping) shutdown(code || 0);
+  });
   console.log('Keep this task running. Ctrl+C stops both servers.');
 }
 
 if (require.main === module) {
   process.on('SIGINT', () => shutdown(0));
   process.on('SIGTERM', () => shutdown(0));
-  start().catch(error => { console.error(error.message); shutdown(1); });
+  start().catch((error) => {
+    console.error(error.message);
+    shutdown(1);
+  });
 }
 module.exports = { freePort, waitForBackend, sources };

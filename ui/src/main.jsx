@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createUserWithEmailAndPassword, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { onValue, ref, serverTimestamp, set } from 'firebase/database';
+import { createUserWithEmailAndPassword, deleteUser, EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { onValue, ref, remove, serverTimestamp, set } from 'firebase/database';
 import { auth, database, configurationError } from './firebase';
 import AuthLayout from './components/AuthLayout';
 import AuthPage from './pages/AuthPage';
@@ -17,36 +17,48 @@ function App() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState('Customer');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [profileError, setProfileError] = useState('');
 
   useEffect(() => {
     let stopProfile = () => {};
-    const stopAuth = onAuthStateChanged(auth, current => {
+    const stopAuth = onAuthStateChanged(auth, (current) => {
       stopProfile();
       setUser(current);
       setProfile(null);
       setProfileError('');
       setLoading(Boolean(current && database));
       if (current && database) {
-        stopProfile = onValue(ref(database, `users/${current.uid}`), snapshot => {
-          setProfile(snapshot.val());
-          setLoading(false);
-        }, failure => {
-          setProfileError(failure.message);
-          setLoading(false);
-        });
+        stopProfile = onValue(
+          ref(database, `users/${current.uid}`),
+          (snapshot) => {
+            setProfile(snapshot.val());
+            setLoading(false);
+          },
+          (failure) => {
+            setProfileError(failure.message);
+            setLoading(false);
+          },
+        );
       }
     });
-    return () => { stopAuth(); stopProfile(); };
+    return () => {
+      stopAuth();
+      stopProfile();
+    };
   }, []);
 
   async function saveProfile(current) {
     await set(ref(database, `users/${current.uid}`), {
-      email: current.email, role: 'Customer', createdAt: serverTimestamp(),
+      email: current.email,
+      role,
+      createdAt: serverTimestamp(),
     });
   }
 
@@ -74,30 +86,111 @@ function App() {
   async function logout() {
     setBusy(true);
     setError('');
-    try { await signOut(auth); } catch (failure) { setError(failure.message); }
-    finally { setBusy(false); }
+    try {
+      await signOut(auth);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resetPassword(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    setResetSent(false);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetSent(true);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteAccount(confirmationPassword) {
+    setBusy(true);
+    setError('');
+    try {
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, confirmationPassword));
+      await remove(ref(database, `users/${user.uid}`));
+      await deleteUser(user);
+      setProfile(null);
+    } catch (failure) {
+      setError(failure.code === 'auth/requires-recent-login'
+        ? 'For security, sign out and sign in again before deleting your account.'
+        : failure.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function screen() {
     if (configurationError) return <StatusPage title="Setup required" message={configurationError} />;
     if (loading) return <StatusPage loading />;
-    if (!user) return <AuthPage
-      registering={registering} email={email} setEmail={setEmail} password={password} setPassword={setPassword}
-      busy={busy} error={error} onSubmit={submit}
-      onToggleMode={() => { setRegistering(!registering); setError(''); }} />;
-    if (profileError) return <StatusPage title="Profile unavailable" message={`Could not load your profile: ${profileError}`} busy={busy} error={error} onLogout={logout} />;
-    if (!profile) return <ProfileSetupPage busy={busy} error={error} onSubmit={submit} onLogout={logout} />;
-    return <DashboardPage key={user.uid} firebaseUser={user} email={user.email} busy={busy} error={error} onLogout={logout} />;
+    if (!user)
+      return (
+        <AuthPage
+          registering={registering}
+          resettingPassword={resettingPassword}
+          resetSent={resetSent}
+          role={role}
+          setRole={setRole}
+          email={email}
+          setEmail={setEmail}
+          password={password}
+          setPassword={setPassword}
+          busy={busy}
+          error={error}
+          onSubmit={submit}
+          onResetPassword={resetPassword}
+          onForgotPassword={() => {
+            setResettingPassword(true);
+            setResetSent(false);
+            setError('');
+            setPassword('');
+          }}
+          onBackToSignIn={() => {
+            setResettingPassword(false);
+            setResetSent(false);
+            setError('');
+          }}
+          onToggleMode={() => {
+            setRegistering(!registering);
+            setError('');
+            setResetSent(false);
+          }}
+        />
+      );
+    if (profileError)
+      return (
+        <StatusPage
+          title="Profile unavailable"
+          message={`Could not load your profile: ${profileError}`}
+          busy={busy}
+          error={error}
+          onLogout={logout}
+        />
+      );
+    if (!profile) return <ProfileSetupPage busy={busy} error={error} onSubmit={submit} onLogout={logout} role={role} setRole={setRole} />;
+    return (
+      <DashboardPage
+        key={user.uid}
+        firebaseUser={user}
+        email={user.email}
+        busy={busy}
+        error={error}
+        onLogout={logout}
+        onDeleteAccount={deleteAccount}
+      />
+    );
   }
 
-  const isDashboard =
-  !configurationError &&
-  !loading &&
-  user &&
-  profile &&
-  !profileError;
+  const isDashboard = !configurationError && !loading && user && profile && !profileError;
 
-return isDashboard ? screen() : <AuthLayout>{screen()}</AuthLayout>;
+  return isDashboard ? screen() : <AuthLayout>{screen()}</AuthLayout>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);

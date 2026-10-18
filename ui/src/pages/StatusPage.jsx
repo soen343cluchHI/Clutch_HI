@@ -4,7 +4,9 @@ export default function StatusPage({ loading, title, message, busy, error, onLog
   if (loading) {
     return (
       <section className="panel" aria-busy="true">
-        <span className="visually-hidden" role="status">Loading…</span>
+        <span className="visually-hidden" role="status">
+          Loading…
+        </span>
         <div className="skeleton skeleton-title" />
         <div className="skeleton skeleton-line" />
         <div className="skeleton skeleton-input" />
@@ -20,7 +22,11 @@ export default function StatusPage({ loading, title, message, busy, error, onLog
         <p role="alert">{message}</p>
       </header>
       <FormAlert message={error} />
-      {onLogout && <button className="btn btn-secondary" disabled={busy} onClick={onLogout}>Sign Out</button>}
+      {onLogout && (
+        <button className="btn btn-secondary" disabled={busy} onClick={onLogout}>
+          Sign Out
+        </button>
+      )}
     </section>
   );
 }

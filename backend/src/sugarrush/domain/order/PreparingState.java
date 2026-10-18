@@ -1,5 +1,18 @@
 package sugarrush.domain.order;
+
 public final class PreparingState implements OrderState {
- public String name(){return "Preparing";}
- public OrderState ready(){return new ReadyState();}
+    @Override
+    public String name() {
+        return "Preparing";
+    }
+
+    @Override
+    public OrderState ready() {
+        return new ReadyState();
+    }
+
+    @Override
+    public OrderState cancel() {
+        return new CancelledState();
+    }
 }

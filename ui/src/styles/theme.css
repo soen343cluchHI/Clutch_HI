@@ -40,7 +40,11 @@
   }
 }
 
-*, *::before, *::after { box-sizing: border-box; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
@@ -53,12 +57,30 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
-h1, p, dl, dd, fieldset { margin: 0; }
-h1 { text-wrap: balance; }
-p { text-wrap: pretty; }
-button, input { font: inherit; color: inherit; touch-action: manipulation; }
+h1,
+p,
+dl,
+dd,
+fieldset {
+  margin: 0;
+}
+h1 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
+button,
+input {
+  font: inherit;
+  color: inherit;
+  touch-action: manipulation;
+}
 
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 .visually-hidden {
   position: absolute;

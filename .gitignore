@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env.local
 backend/out/
+backend/data/
 *.class
 
 .fake

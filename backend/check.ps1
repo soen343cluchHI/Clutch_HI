@@ -9,6 +9,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Java compilation failed" }
     & java -cp $outputPath sugarrush.ArchitectureChecks
     if ($LASTEXITCODE -ne 0) { throw "Architecture checks failed" }
+    & java -cp $outputPath sugarrush.RestaurantOwnershipChecks
+    if ($LASTEXITCODE -ne 0) { throw "Restaurant ownership checks failed" }
     & java --add-modules jdk.httpserver -cp $outputPath sugarrush.presentation.http.FirebaseLoginChecks
     if ($LASTEXITCODE -ne 0) { throw "Firebase login checks failed" }
 } finally {

@@ -3,8 +3,9 @@ import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 
 const databaseURL = import.meta.env.VITE_FIREBASE_DATABASE_URL?.trim();
-export const configurationError = databaseURL ? '' :
-  'Set VITE_FIREBASE_DATABASE_URL in ui/.env.local for local development or ui/.env.production for a production build, then rebuild the app.';
+export const configurationError = databaseURL
+  ? ''
+  : 'Set VITE_FIREBASE_DATABASE_URL in ui/.env.local for local development or ui/.env.production for a production build, then rebuild the app.';
 
 const app = initializeApp({
   apiKey: 'AIzaSyAn3ig9__1Z9xSCxNFTGwlrCHSp16OAsuE',
