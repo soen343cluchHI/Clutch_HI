@@ -32,6 +32,8 @@ public final class ApiServer {
     private final FirebaseTokenVerifier verifier;
     private final HttpClient http = HttpClient.newHttpClient();
     private final String databaseUrl;
+    private final boolean remoteRestaurants = "true".equalsIgnoreCase(System.getenv("SUGARRUSH_REMOTE_RESTAURANTS"));
+    private boolean restaurantsLoaded;
 
     ApiServer(SugarRush application, FirebaseTokenVerifier verifier) {
         this(application, verifier, null);
@@ -45,7 +47,8 @@ public final class ApiServer {
 
     public static void main(String[] args) throws IOException {
         Path seed = Path.of(args.length > 0 ? args[0] : "backend/config/live.properties");
-        int port = args.length > 1 ? Integer.parseInt(args[1]) : 8080;
+        int port = args.length > 1 ? Integer.parseInt(args[1])
+                : Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
         Properties settings = new Properties();
 
         try (Reader reader = Files.newBufferedReader(seed)) {
@@ -77,7 +80,7 @@ public final class ApiServer {
     }
 
     HttpServer start(int port) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
         server.createContext("/api/", this::handle);
         server.start();
         return server;
@@ -85,6 +88,17 @@ public final class ApiServer {
 
     private void handle(HttpExchange exchange) throws IOException {
         try (exchange) {
+            String origin = exchange.getRequestHeaders().getFirst("Origin");
+            if (origin != null && origin.equals(System.getenv().getOrDefault("SUGARRUSH_ALLOWED_ORIGIN", "https://soen343-f701c.web.app"))) {
+                exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
+                exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+                exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+                exchange.getResponseHeaders().set("Vary", "Origin");
+            }
+            if (exchange.getRequestMethod().equals("OPTIONS")) {
+                exchange.sendResponseHeaders(204, -1);
+                return;
+            }
             String path = exchange.getRequestURI().getPath();
             if (path.equals("/api/health")) {
                 if (!method(exchange, "GET"))
@@ -123,6 +137,7 @@ public final class ApiServer {
                 send(exchange, 401, Map.of("error", message(failure)));
                 return;
             }
+            if (remoteRestaurants) loadRestaurants(authorization.substring(7));
             Session session = application.firebaseSession(identity.uid(), identity.email(), profileRole(identity.uid(), identity.email(), authorization.substring(7)));
             String token = session.token();
             if (path.equals("/api/firebase-session")) {
@@ -154,7 +169,16 @@ public final class ApiServer {
                 new Command(token, action);
             default -> throw new IllegalArgumentException("This endpoint does not support that command yet");
             };
-            send(exchange, 200, application.execute(command));
+            Object result = application.execute(command);
+            if (remoteRestaurants && switch (action) {
+                case CREATE_RESTAURANT, PUT_MENU_ITEM, DELETE_MENU_ITEM, SET_RESTAURANT_STATUS -> true;
+                default -> false;
+            }) {
+                String restaurantId = action == Action.CREATE_RESTAURANT
+                        ? ((sugarrush.application.restaurant.RestaurantService.View) result).id() : command.restaurantId();
+                saveRestaurant(restaurantId, authorization.substring(7));
+            }
+            send(exchange, 200, result);
         } catch (FirebaseTokenVerifier.UnavailableException failure) {
             send(exchange, 503, Map.of("error", message(failure)));
         } catch (SecurityException failure) {
@@ -163,6 +187,57 @@ public final class ApiServer {
             send(exchange, 400, Map.of("error", message(failure)));
         } catch (Exception failure) {
             send(exchange, 500, Map.of("error", "Unexpected server error"));
+        }
+    }
+
+    private String restaurantUrl(String id, String token) {
+        return databaseUrl.replaceAll("/+$", "") + "/restaurants" + (id == null ? "" : "/" + id)
+                + ".json?auth=" + java.net.URLEncoder.encode(token, StandardCharsets.UTF_8);
+    }
+
+    private synchronized void loadRestaurants(String token) {
+        if (restaurantsLoaded) return;
+        if (databaseUrl == null || databaseUrl.isBlank()) throw new IllegalStateException("Database URL required");
+        try {
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(restaurantUrl(null, token)))
+                    .GET().build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) throw new IllegalStateException("Could not load restaurants from Firebase");
+            if (!response.body().trim().equals("null")) {
+                for (var entry : Json.object(response.body()).entrySet()) {
+                    if (!(entry.getValue() instanceof Map<?, ?> data)) continue;
+                    Restaurant restaurant = new Restaurant(entry.getKey(), String.valueOf(data.get("ownerId")),
+                            String.valueOf(data.get("name")), ((Number) data.get("x")).doubleValue(),
+                            ((Number) data.get("y")).doubleValue(), Restaurant.Status.valueOf(String.valueOf(data.get("status"))));
+                    if (data.get("menu") instanceof List<?> menu) for (Object raw : menu) {
+                        if (!(raw instanceof Map<?, ?> item)) continue;
+                        restaurant.putItem(new MenuItem(String.valueOf(item.get("id")), String.valueOf(item.get("name")),
+                                new BigDecimal(String.valueOf(item.get("price"))),
+                                MenuItem.Status.valueOf(String.valueOf(item.get("status")))));
+                    }
+                    application.importRestaurant(restaurant);
+                }
+            }
+            restaurantsLoaded = true;
+        } catch (IOException failure) {
+            throw new IllegalStateException("Could not load restaurants from Firebase", failure);
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Could not load restaurants from Firebase", failure);
+        }
+    }
+
+    private void saveRestaurant(String id, String token) {
+        try {
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(restaurantUrl(id, token)))
+                    .header("Content-Type", "application/json")
+                    .PUT(HttpRequest.BodyPublishers.ofString(json(application.restaurantView(id))))
+                    .build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) throw new IllegalStateException("Could not save restaurant to Firebase: " + response.statusCode());
+        } catch (IOException failure) {
+            throw new IllegalStateException("Could not save restaurant to Firebase", failure);
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Could not save restaurant to Firebase", failure);
         }
     }
 

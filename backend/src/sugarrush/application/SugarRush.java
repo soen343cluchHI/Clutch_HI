@@ -35,7 +35,8 @@ public final class SugarRush {
     public static SugarRush fromSeed(Path path) throws IOException {
         SugarRush app = new SugarRush();
         new SeedLoader().load(path, app.registration, app.restaurants);
-        if (path.getFileName().toString().equals("live.properties"))
+        if (path.getFileName().toString().equals("live.properties")
+                && !"true".equalsIgnoreCase(System.getenv("SUGARRUSH_REMOTE_RESTAURANTS")))
             app.restaurants.useStore(Path.of("backend/data/restaurants.properties"));
         Properties properties = new Properties();
         try (Reader reader = Files.newBufferedReader(path)) {
@@ -96,5 +97,14 @@ public final class SugarRush {
 
     public synchronized Object execute(Command command) {
         return commands.process(command);
+    }
+
+    public synchronized void importRestaurant(sugarrush.domain.restaurant.Restaurant restaurant) {
+        restaurants.add(restaurant);
+    }
+
+    public synchronized RestaurantService.View restaurantView(String id) {
+        return restaurants.browse(new User("system", "system", Role.OPERATOR)).stream()
+                .filter(view -> view.id().equals(id)).findFirst().orElseThrow();
     }
 }

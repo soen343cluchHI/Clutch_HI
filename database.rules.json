@@ -12,6 +12,17 @@
         "createdAt": { ".validate": "newData.isNumber() && newData.val() === now" },
         "$other": { ".validate": false }
       }
+    },
+    "restaurants": {
+      ".read": "auth != null",
+      "$id": {
+        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'Restaurant' && newData.child('ownerId').val() === 'firebase:' + auth.uid && (!data.exists() || data.child('ownerId').val() === newData.child('ownerId').val())",
+        ".validate": "newData.hasChildren(['ownerId', 'name', 'x', 'y', 'status'])",
+        "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80" },
+        "x": { ".validate": "newData.isNumber()" },
+        "y": { ".validate": "newData.isNumber()" },
+        "status": { ".validate": "newData.val() === 'OPEN' || newData.val() === 'PAUSED' || newData.val() === 'CLOSED'" }
+      }
     }
   }
 }

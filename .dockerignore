@@ -1,0 +1,7 @@
+.git
+.firebase
+node_modules
+ui
+backend/out
+backend/data
+*.log
