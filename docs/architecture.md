@@ -43,7 +43,8 @@ Orders enforce nonempty lines, quantities and legal state transitions.
 
 Accepted orders enter their restaurant's FIFO preparation queue. An order can
 start preparing only at the head; it stays there until ready, then leaves the
-queue. This implementation follows the document's arrival-order requirement
+queue. A cancelled order leaves the queue without reordering the others.
+This implementation follows the document's arrival-order requirement
 using acceptance/enqueue order. If the intended rule is original placement order
 even when staff accept out of order, that should be clarified in the SA.
 
@@ -58,7 +59,9 @@ access is restricted to operators; customers and staff get filtered order views.
 The facade exposes registration, login and authenticated command execution.
 Role menus and permission checks share the same action catalog. A command never
 accepts a trusted customer ID or role from the caller: these come from the session.
-Restaurant commands additionally check the authenticated user's ownership.
+Restaurant commands additionally check the authenticated user's ownership,
+except that operators may pause or reopen any restaurant. Browsing returns only
+the staff member's own restaurants; customers and operators see all of them.
 Operator registration is reserved for trusted bootstrap.
 
 The local account service stores salted PBKDF2 password hashes, not plaintext
@@ -69,8 +72,9 @@ Seed loading fails before returning the app if a role or field is missing.
 
 ## Current phase and integration
 
-Placed ? Accepted ? Preparing ? Ready and Placed ? Rejected are exposed as
-commands. PickedUp and Delivered are implemented as domain states for the full
+Placed -> Accepted -> Preparing -> Ready and Placed -> Rejected are exposed as
+commands. Customers cancel their own Placed orders; operators cancel Accepted or
+Preparing orders. PickedUp and Delivered are implemented as domain states for the full
 lifecycle, but courier commands and delivery assignment are deferred as the
 document's phase description requires. Courier accounts still have their own
 role menu and authenticated shared commands.

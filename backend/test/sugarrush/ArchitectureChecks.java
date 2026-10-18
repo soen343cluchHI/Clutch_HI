@@ -42,6 +42,11 @@ public final class ArchitectureChecks {
   RestaurantService.View shop=(RestaurantService.View)restaurants.get(0);
   check(shop.menu().stream().anyMatch(i->i.id().equals("cookie")),"Sold-out items must remain visible");
   expect(UnsupportedOperationException.class,()->shop.menu().clear());
+  List<?> own=(List<?>)app.execute(new Command(staff.token(),Action.BROWSE_RESTAURANTS));
+  check(own.size()==1 && ((RestaurantService.View)own.get(0)).id().equals("sugar-shop"),"Staff can browse another restaurant");
+  List<?> otherOwn=(List<?>)app.execute(new Command(other.token(),Action.BROWSE_RESTAURANTS));
+  check(otherOwn.size()==1 && ((RestaurantService.View)otherOwn.get(0)).id().equals("other-shop"),"Staff can browse another restaurant");
+  check(((List<?>)app.execute(new Command(operator.token(),Action.BROWSE_RESTAURANTS))).size()==2,"Operator cannot browse every restaurant");
   expect(IllegalArgumentException.class,()->app.execute(Command.place(customer.token(),"sugar-shop",Map.of("cookie",1))));
   expect(IllegalArgumentException.class,()->app.execute(Command.place(customer.token(),"sugar-shop",Map.of("cake",0))));
   expect(IllegalArgumentException.class,()->app.execute(Command.place(customer.token(),"sugar-shop",Map.of("cake",-1))));
@@ -53,6 +58,9 @@ public final class ArchitectureChecks {
   OrderService.View second=place(app,customer.token());
   check(first.total().equals(new BigDecimal("17.00")),"Incorrect price snapshot");
   expect(SecurityException.class,()->app.execute(Command.order(other.token(),Action.ACCEPT_ORDER,first.id(),null)));
+  expect(SecurityException.class,()->app.execute(Command.order(other.token(),Action.REJECT_ORDER,first.id(),"Not mine")));
+  expect(SecurityException.class,()->app.execute(Command.order(other.token(),Action.START_PREPARING,first.id(),null)));
+  expect(SecurityException.class,()->app.execute(Command.order(other.token(),Action.MARK_READY,first.id(),null)));
   expect(SecurityException.class,()->app.execute(Command.order(customer.token(),Action.ACCEPT_ORDER,first.id(),null)));
   int before=events(app,operator.token()).size();
   expect(IllegalStateException.class,()->app.execute(Command.order(staff.token(),Action.MARK_READY,first.id(),null)));

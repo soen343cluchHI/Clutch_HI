@@ -41,7 +41,7 @@ public final class FirebaseLoginChecks {
 
         Path seed = Files.createTempFile("firebase-login-checks", ".properties");
         Files.writeString(seed, Files.readString(Path.of("backend/config/demo.properties")) +
-            "\nfirebase.user.staff-a.account=restaurant\nfirebase.user.admin-a.account=operator\n");
+            "\nfirebase.user.staff-a.account=restaurant\nfirebase.user.staff-b.account=restaurant2\nfirebase.user.admin-a.account=operator\n");
         var server = new ApiServer(SugarRush.fromSeed(seed), verifier).start(0);
         String base = "http://127.0.0.1:" + server.getAddress().getPort();
         try {
@@ -67,6 +67,15 @@ public final class FirebaseLoginChecks {
             check(command(base, renewed, "LIST_ORDERS", Map.of()).array().size() == 1, "Token refresh changed identity");
             String staff = token("staff-a", "staff@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60);
             check(request(base, "/api/firebase-session", staff, Map.of()).object().get("role").equals("RESTAURANT"), "Approved staff mapping lost");
+            String rival = token("staff-b", "rival@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60);
+            List<?> rivalBrowse = command(base, rival, "BROWSE_RESTAURANTS", Map.of("role", "OPERATOR")).array();
+            check(rivalBrowse.size() == 1 && ((Map<?, ?>) rivalBrowse.get(0)).get("id").equals("other-shop"), "Staff can browse another restaurant");
+            check(command(base, rival, "RESTAURANT_QUEUE", Map.of("restaurantId", "sugar-shop")).status == 403, "Staff read another restaurant's queue");
+            check(command(base, rival, "SET_RESTAURANT_STATUS", Map.of("restaurantId", "sugar-shop", "status", "PAUSED")).status == 403, "Staff paused another restaurant");
+            check(command(base, rival, "LIST_ORDERS", Map.of()).array().isEmpty(), "Staff see another restaurant's orders");
+            for (String action : List.of("ACCEPT_ORDER", "REJECT_ORDER", "START_PREPARING", "MARK_READY")) {
+                check(command(base, rival, action, Map.of("orderId", id, "reason", "Not mine")).status == 403, "Staff changed another restaurant's order");
+            }
             for (String action : List.of("ACCEPT_ORDER", "START_PREPARING", "MARK_READY")) {
                 check(command(base, staff, action, Map.of("orderId", id)).status == 200, "Staff lifecycle command failed");
             }

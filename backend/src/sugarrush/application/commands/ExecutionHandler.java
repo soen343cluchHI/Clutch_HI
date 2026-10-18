@@ -18,7 +18,7 @@ public final class ExecutionHandler extends CommandHandler {
   case SESSION_INFO->user;
   case ROLE_MENU->Action.menu(user.role());
   case LOGOUT->{auth.logout(c.sessionToken());yield "Logged out";}
-  case BROWSE_RESTAURANTS->restaurants.browse();
+  case BROWSE_RESTAURANTS->restaurants.browse(user);
   case LIST_ORDERS->orders.visible(user);
   case PLACE_ORDER->orders.place(user,c.restaurantId(),c.items());
   case CANCEL_ORDER,ACCEPT_ORDER,REJECT_ORDER,START_PREPARING,MARK_READY->orders.transition(c.orderId(),c.action().name(),c.reason());
