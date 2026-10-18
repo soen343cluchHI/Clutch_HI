@@ -3,7 +3,7 @@ async function post(firebaseUser, path, fields = {}, forceRefresh = false) {
   const token = await firebaseUser.getIdToken(forceRefresh);
   let response;
   try {
-    response = await fetch(path, {
+    response = await fetch(`${import.meta.env.VITE_API_URL?.replace(/\/$/, '') || ''}${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -12,11 +12,11 @@ async function post(firebaseUser, path, fields = {}, forceRefresh = false) {
       body: new URLSearchParams(fields),
     });
   } catch {
-    throw new Error('Cannot reach the order server. Make sure the Java backend is running.');
+    throw new Error('Cannot reach the order server. Retry shortly.');
   }
   if (response.status === 401 && !forceRefresh) return post(firebaseUser, path, fields, true);
   if (!response.headers.get('content-type')?.includes('application/json')) {
-    throw new Error('The order server is unavailable. Check Java and the Vite /api proxy.');
+    throw new Error('The order server is unavailable. Retry shortly.');
   }
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'The command failed.');

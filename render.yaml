@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: sugarrush-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: SUGARRUSH_DATABASE_URL
+        value: https://soen343-f701c-default-rtdb.firebaseio.com
+      - key: SUGARRUSH_ALLOWED_ORIGIN
+        value: https://soen343-f701c.web.app
+      - key: SUGARRUSH_REMOTE_RESTAURANTS
+        value: "true"
