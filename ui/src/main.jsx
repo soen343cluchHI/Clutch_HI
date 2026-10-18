@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createUserWithEmailAndPassword, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { onValue, ref, serverTimestamp, set } from 'firebase/database';
+import { createUserWithEmailAndPassword, deleteUser, EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { onValue, ref, remove, serverTimestamp, set } from 'firebase/database';
 import { auth, database, configurationError } from './firebase';
 import AuthLayout from './components/AuthLayout';
 import AuthPage from './pages/AuthPage';
@@ -17,8 +17,11 @@ function App() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState('Customer');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [profileError, setProfileError] = useState('');
@@ -54,7 +57,7 @@ function App() {
   async function saveProfile(current) {
     await set(ref(database, `users/${current.uid}`), {
       email: current.email,
-      role: 'Customer',
+      role,
       createdAt: serverTimestamp(),
     });
   }
@@ -92,6 +95,38 @@ function App() {
     }
   }
 
+  async function resetPassword(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError('');
+    setResetSent(false);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetSent(true);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteAccount(confirmationPassword) {
+    setBusy(true);
+    setError('');
+    try {
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, confirmationPassword));
+      await remove(ref(database, `users/${user.uid}`));
+      await deleteUser(user);
+      setProfile(null);
+    } catch (failure) {
+      setError(failure.code === 'auth/requires-recent-login'
+        ? 'For security, sign out and sign in again before deleting your account.'
+        : failure.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function screen() {
     if (configurationError) return <StatusPage title="Setup required" message={configurationError} />;
     if (loading) return <StatusPage loading />;
@@ -99,6 +134,10 @@ function App() {
       return (
         <AuthPage
           registering={registering}
+          resettingPassword={resettingPassword}
+          resetSent={resetSent}
+          role={role}
+          setRole={setRole}
           email={email}
           setEmail={setEmail}
           password={password}
@@ -106,9 +145,22 @@ function App() {
           busy={busy}
           error={error}
           onSubmit={submit}
+          onResetPassword={resetPassword}
+          onForgotPassword={() => {
+            setResettingPassword(true);
+            setResetSent(false);
+            setError('');
+            setPassword('');
+          }}
+          onBackToSignIn={() => {
+            setResettingPassword(false);
+            setResetSent(false);
+            setError('');
+          }}
           onToggleMode={() => {
             setRegistering(!registering);
             setError('');
+            setResetSent(false);
           }}
         />
       );
@@ -122,7 +174,7 @@ function App() {
           onLogout={logout}
         />
       );
-    if (!profile) return <ProfileSetupPage busy={busy} error={error} onSubmit={submit} onLogout={logout} />;
+    if (!profile) return <ProfileSetupPage busy={busy} error={error} onSubmit={submit} onLogout={logout} role={role} setRole={setRole} />;
     return (
       <DashboardPage
         key={user.uid}
@@ -131,6 +183,7 @@ function App() {
         busy={busy}
         error={error}
         onLogout={logout}
+        onDeleteAccount={deleteAccount}
       />
     );
   }

@@ -4,9 +4,14 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.Reader;
+import java.math.BigDecimal;
 import java.lang.reflect.RecordComponent;
 import java.net.InetSocketAddress;
+import java.net.URI;
 import java.net.URLDecoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,21 +20,31 @@ import java.util.*;
 import sugarrush.application.SugarRush;
 import sugarrush.application.commands.*;
 import sugarrush.domain.restaurant.Restaurant;
+import sugarrush.domain.restaurant.MenuItem;
 import sugarrush.domain.user.Session;
+import sugarrush.domain.user.Role;
 import sugarrush.infrastructure.auth.FirebaseTokenVerifier;
+import sugarrush.infrastructure.json.Json;
 
 public final class ApiServer {
     
     private final SugarRush application;
     private final FirebaseTokenVerifier verifier;
+    private final HttpClient http = HttpClient.newHttpClient();
+    private final String databaseUrl;
 
     ApiServer(SugarRush application, FirebaseTokenVerifier verifier) {
+        this(application, verifier, null);
+    }
+
+    ApiServer(SugarRush application, FirebaseTokenVerifier verifier, String databaseUrl) {
         this.application = application;
         this.verifier = verifier;
+        this.databaseUrl = databaseUrl;
     }
 
     public static void main(String[] args) throws IOException {
-        Path seed = Path.of(args.length > 0 ? args[0] : "backend/config/demo.properties");
+        Path seed = Path.of(args.length > 0 ? args[0] : "backend/config/live.properties");
         int port = args.length > 1 ? Integer.parseInt(args[1]) : 8080;
         Properties settings = new Properties();
 
@@ -38,10 +53,27 @@ public final class ApiServer {
         }
 
         String projectId = settings.getProperty("firebase.projectId", "soen343-f701c").trim();
-        ApiServer api = new ApiServer(SugarRush.fromSeed(seed), new FirebaseTokenVerifier(projectId));
+        ApiServer api = new ApiServer(SugarRush.fromSeed(seed), new FirebaseTokenVerifier(projectId), databaseUrl());
         HttpServer server = api.start(port);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop(0)));
         System.out.println("SugarRush backend: http://localhost:" + port);
+    }
+
+    private static String databaseUrl() throws IOException {
+        String configured = System.getenv("SUGARRUSH_DATABASE_URL");
+        if (configured != null && !configured.isBlank()) return configured.trim();
+        for (String file : List.of("ui/.env.local", "ui/.env.production")) {
+            Path path = Path.of(file);
+            if (!Files.exists(path)) continue;
+            for (String line : Files.readAllLines(path)) {
+                if (!line.startsWith("VITE_FIREBASE_DATABASE_URL=")) continue;
+                String value = line.substring("VITE_FIREBASE_DATABASE_URL=".length()).trim();
+                if (value.length() >= 2 && ((value.startsWith("\"") && value.endsWith("\""))
+                        || (value.startsWith("'") && value.endsWith("'")))) value = value.substring(1, value.length() - 1);
+                if (!value.isBlank()) return value;
+            }
+        }
+        throw new IllegalStateException("Set SUGARRUSH_DATABASE_URL or VITE_FIREBASE_DATABASE_URL in ui/.env.local");
     }
 
     HttpServer start(int port) throws IOException {
@@ -91,7 +123,7 @@ public final class ApiServer {
                 send(exchange, 401, Map.of("error", message(failure)));
                 return;
             }
-            Session session = application.firebaseSession(identity.uid(), identity.email());
+            Session session = application.firebaseSession(identity.uid(), identity.email(), profileRole(identity.uid(), identity.email(), authorization.substring(7)));
             String token = session.token();
             if (path.equals("/api/firebase-session")) {
                 send(exchange, 200, application.execute(new Command(token, Action.SESSION_INFO)));
@@ -105,6 +137,12 @@ public final class ApiServer {
                 }
             }
             Command command = switch (action) {
+            case CREATE_RESTAURANT -> new Command(token, action, null, null, null, required(fields, "name"), null, null);
+            case PUT_MENU_ITEM -> new Command(token, action, required(fields, "restaurantId"), null, null, null, null,
+                    new MenuItem(required(fields, "itemId"), required(fields, "name"),
+                            new BigDecimal(required(fields, "price")), MenuItem.Status.valueOf(required(fields, "itemStatus"))));
+            case DELETE_MENU_ITEM -> new Command(token, action, required(fields, "restaurantId"), null, null,
+                    required(fields, "itemId"), null, null);
             case RESTAURANT_QUEUE ->
                 new Command(token, action, required(fields, "restaurantId"), null, null, null, null, null);
             case SET_RESTAURANT_STATUS -> new Command(token, action, required(fields, "restaurantId"), null, null, null,
@@ -127,6 +165,26 @@ public final class ApiServer {
             send(exchange, 500, Map.of("error", "Unexpected server error"));
         }
     }
+
+    private Role profileRole(String uid, String email, String token) {
+        if (databaseUrl == null || databaseUrl.isBlank()) return Role.CUSTOMER;
+        try {
+            String url = databaseUrl.replaceAll("/+$", "") + "/users/" + uid + ".json?auth=" +
+                    java.net.URLEncoder.encode(token, StandardCharsets.UTF_8);
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(url)).GET().build(),
+                    HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) throw new IllegalStateException("Could not verify account role");
+            Map<String, Object> profile = Json.object(response.body());
+            if (!email.equals(profile.get("email"))) throw new SecurityException("Account profile mismatch");
+            return Role.valueOf(String.valueOf(profile.get("role")).toUpperCase(Locale.ROOT));
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Could not verify account role");
+        } catch (IOException failure) {
+            throw new IllegalStateException("Could not verify account role");
+        }
+    }
+
 
     private static String message(Exception failure) {
         return failure.getMessage() == null ? "Command failed" : failure.getMessage();

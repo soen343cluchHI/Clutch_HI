@@ -17,7 +17,10 @@ const money = (value) =>
     currency: 'CAD',
   }).format(value);
 
-export default function DashboardPage({ firebaseUser, email, onLogout, busy: authBusy, error: authError }) {
+export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteAccount, busy: authBusy, error: authError }) {
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
   const [tab, setTab] = useState(null);
   const [search, setSearch] = useState('');
   const [showLabels, setShowLabels] = useState(true);
@@ -26,6 +29,10 @@ export default function DashboardPage({ firebaseUser, email, onLogout, busy: aut
   const [orders, setOrders] = useState([]);
   const [queues, setQueues] = useState({});
   const [restaurantId, setRestaurantId] = useState('');
+  const [newRestaurantName, setNewRestaurantName] = useState('');
+  const [itemName, setItemName] = useState('');
+  const [itemPrice, setItemPrice] = useState('');
+  const [editingItemId, setEditingItemId] = useState('');
   const [quantities, setQuantities] = useState({});
   const [reasons, setReasons] = useState({});
   const [logs, setLogs] = useState([]);
@@ -151,6 +158,50 @@ export default function DashboardPage({ firebaseUser, email, onLogout, busy: aut
   function setRestaurantStatus(status) {
     run(async () => {
       await send(session, 'SET_RESTAURANT_STATUS', { restaurantId, status });
+      await refresh(session);
+    });
+  }
+
+  function createRestaurant(event) {
+    event.preventDefault();
+    run(async () => {
+      const created = await send(session, 'CREATE_RESTAURANT', { name: newRestaurantName.trim() });
+      setNewRestaurantName('');
+      await refresh(session);
+      setRestaurantId(created.id);
+      setTab('Restaurant');
+    });
+  }
+
+  function saveMenuItem(event) {
+    event.preventDefault();
+    run(async () => {
+      await send(session, 'PUT_MENU_ITEM', {
+        restaurantId,
+        itemId: editingItemId || crypto.randomUUID(),
+        name: itemName.trim(),
+        price: Number(itemPrice).toFixed(2),
+        itemStatus: editingItemId ? restaurant.menu.find((item) => item.id === editingItemId)?.status : 'AVAILABLE',
+      });
+      setEditingItemId('');
+      setItemName('');
+      setItemPrice('');
+      await refresh(session);
+    });
+  }
+
+  function changeItemStatus(item) {
+    run(async () => {
+      await send(session, 'PUT_MENU_ITEM', { restaurantId, itemId: item.id, name: item.name,
+        price: Number(item.price).toFixed(2), itemStatus: item.status === 'AVAILABLE' ? 'SOLD_OUT' : 'AVAILABLE' });
+      await refresh(session);
+    });
+  }
+
+  function deleteMenuItem(item) {
+    if (!window.confirm(`Delete ${item.name} from the menu?`)) return;
+    run(async () => {
+      await send(session, 'DELETE_MENU_ITEM', { restaurantId, itemId: item.id });
       await refresh(session);
     });
   }
@@ -290,6 +341,11 @@ export default function DashboardPage({ firebaseUser, email, onLogout, busy: aut
                         />
                       </label>
                     )}
+                    {role === 'RESTAURANT' && <div className="menu-owner-actions">
+                      <button className="btn btn-secondary" type="button" disabled={disabled} onClick={() => { setEditingItemId(item.id); setItemName(item.name); setItemPrice(String(item.price)); }}>Edit</button>
+                      <button className="btn btn-secondary" type="button" disabled={disabled} onClick={() => changeItemStatus(item)}>{item.status === 'AVAILABLE' ? 'Mark sold out' : 'Mark available'}</button>
+                      <button className="btn btn-danger-outline" type="button" disabled={disabled} onClick={() => deleteMenuItem(item)}>Delete</button>
+                    </div>}
                   </li>
                 ))}
               </ul>
@@ -303,6 +359,14 @@ export default function DashboardPage({ firebaseUser, email, onLogout, busy: aut
                 </div>
               )}
             </form>
+            {role === 'RESTAURANT' && <form className="menu-editor" onSubmit={saveMenuItem}>
+              <h3>{editingItemId ? 'Edit menu item' : 'Add menu item'}</h3>
+              <label>Item name<input required maxLength="80" value={itemName} onChange={(e) => setItemName(e.target.value)} /></label>
+              <label>Price (CAD)<input required type="number" min="0" step="0.01" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} /></label>
+              <div className="menu-owner-actions"><button className="btn btn-primary" disabled={disabled}>{editingItemId ? 'Save item' : 'Add item'}</button>
+                {editingItemId && <button className="btn btn-secondary" type="button" onClick={() => { setEditingItemId(''); setItemName(''); setItemPrice(''); }}>Cancel</button>}
+              </div>
+            </form>}
             {role === 'RESTAURANT' && (
               <button className="btn btn-primary" disabled={disabled} onClick={() => setTab('Orders')}>
                 Manage restaurant orders
@@ -425,11 +489,20 @@ export default function DashboardPage({ firebaseUser, email, onLogout, busy: aut
         </div>
         <div className="dash-account">
           <strong>{session ? `${session.user.username} · ${role}` : 'Loading your account...'}</strong>
-          <button className="btn btn-secondary" disabled={disabled} onClick={signOut}>
-            Sign out
-          </button>
+          <button className="profile-button" type="button" aria-label="Account settings" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(!settingsOpen)}>👤</button>
         </div>
       </header>
+      {settingsOpen && <section className="dash-card account-settings" aria-label="Account settings">
+        <div className="dash-section-title"><h2>Account settings</h2><button className="btn-link" type="button" onClick={() => { setSettingsOpen(false); setConfirmDelete(false); }}>Close</button></div>
+        <p className="dash-muted">{email}</p>
+        <button className="btn btn-secondary" disabled={disabled} onClick={signOut}>Sign out</button>
+        {!confirmDelete ? <button className="btn btn-danger-outline" disabled={disabled} onClick={() => setConfirmDelete(true)}>Delete account</button> : <div className="delete-confirmation">
+          <p>Delete your account permanently? You will lose access to this profile.</p>
+          <label>Confirm password<input type="password" autoComplete="current-password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} /></label>
+          <button className="btn btn-danger" disabled={disabled || !deletePassword} onClick={() => onDeleteAccount(deletePassword)}>Yes, delete account</button>
+          <button className="btn btn-secondary" disabled={disabled} onClick={() => { setConfirmDelete(false); setDeletePassword(''); }}>Cancel</button>
+        </div>}
+      </section>}
       {(error || authError) && (
         <p className="form-alert" role="alert">
           {error || authError}
@@ -488,6 +561,10 @@ export default function DashboardPage({ firebaseUser, email, onLogout, busy: aut
         {showSidebar && (
           <aside className="dash-card restaurant-sidebar">
             <h2>{role === 'RESTAURANT' ? 'Your restaurants' : 'Find a restaurant'}</h2>
+            {role === 'RESTAURANT' && <form className="create-restaurant" onSubmit={createRestaurant}>
+              <label>Restaurant name<input required maxLength="80" value={newRestaurantName} onChange={(e) => setNewRestaurantName(e.target.value)} placeholder="Your restaurant name" /></label>
+              <button className="btn btn-primary" disabled={disabled}>Create restaurant</button>
+            </form>}
 
             {role === 'CUSTOMER' && (
               <label>
@@ -504,7 +581,7 @@ export default function DashboardPage({ firebaseUser, email, onLogout, busy: aut
 
             {!session ? (
               <p className="dash-muted">Loading restaurants...</p>
-            ) : hasSearch || role === 'RESTAURANT' ? (
+            ) : hasSearch || role === 'RESTAURANT' || role === 'CUSTOMER' ? (
               <>
                 <p className="dash-muted">
                   {filteredRestaurants.length} restaurant
@@ -530,7 +607,7 @@ export default function DashboardPage({ firebaseUser, email, onLogout, busy: aut
                   ))}
                 </div>
 
-                {!filteredRestaurants.length && <p className="dash-empty">No restaurants match your search.</p>}
+                {!filteredRestaurants.length && <p className="dash-empty">{role === 'RESTAURANT' ? 'Create your first restaurant above.' : 'No restaurants match your search.'}</p>}
               </>
             ) : (
               <>

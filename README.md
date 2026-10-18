@@ -1,6 +1,8 @@
 # Clutch_HI
 Repository for SOEN343 project. Team name is Clutch_HI
 
+Restaurant accounts can create their own restaurants in the dashboard and edit menu items, availability, and restaurant status. The running backend loads `backend/config/live.properties` (which contains no demo restaurants) and saves owner-created restaurants in `backend/data/restaurants.properties`. Sign in with the same Firebase email and password to manage them again. `backend/config/demo.properties` remains for backend checks.
+
 Team members:
 
 Louay Dridi - 40309145

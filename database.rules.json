@@ -5,10 +5,10 @@
     "users": {
       "$uid": {
         ".read": "auth != null && auth.uid === $uid",
-        ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.exists()",
+        ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists()) || (data.exists() && !newData.exists()))",
         ".validate": "newData.hasChildren(['email', 'role', 'createdAt'])",
         "email": { ".validate": "newData.isString() && newData.val() === auth.token.email" },
-        "role": { ".validate": "newData.val() === 'Customer'" },
+        "role": { ".validate": "newData.val() === 'Customer' || newData.val() === 'Restaurant' || newData.val() === 'Courier' || newData.val() === 'Operator'" },
         "createdAt": { ".validate": "newData.isNumber() && newData.val() === now" },
         "$other": { ".validate": false }
       }

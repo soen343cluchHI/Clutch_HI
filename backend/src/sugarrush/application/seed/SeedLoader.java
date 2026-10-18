@@ -24,7 +24,7 @@ public final class SeedLoader {
         }
         if (!roles.containsAll(EnumSet.allOf(Role.class)))
             throw new IllegalArgumentException("Seed needs an account per role");
-        for (String key : ids(p, "restaurants")) {
+        for (String key : optionalIds(p, "restaurants")) {
             String base = "restaurant." + key + ".";
             User owner = registration.byUsername(required(p, base + "owner"));
             if (owner.role() != Role.RESTAURANT)
@@ -51,5 +51,10 @@ public final class SeedLoader {
 
     private static List<String> ids(Properties p, String key) {
         return Arrays.stream(required(p, key).split(",")).map(String::trim).toList();
+    }
+
+    private static List<String> optionalIds(Properties p, String key) {
+        String value = p.getProperty(key, "").trim();
+        return value.isEmpty() ? List.of() : Arrays.stream(value.split(",")).map(String::trim).toList();
     }
 }

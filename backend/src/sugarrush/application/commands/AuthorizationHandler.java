@@ -39,7 +39,7 @@ public final class AuthorizationHandler extends CommandHandler {
 
         String id = switch (c.action()) {   //get the restaurant id for actions that require it
             case ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY -> orders.require(c.orderId()).restaurantId();
-            case RESTAURANT_QUEUE, SET_RESTAURANT_STATUS, PUT_MENU_ITEM -> c.restaurantId();
+            case RESTAURANT_QUEUE, SET_RESTAURANT_STATUS, PUT_MENU_ITEM, DELETE_MENU_ITEM -> c.restaurantId();
             default -> null;
         };
 
@@ -48,7 +48,7 @@ public final class AuthorizationHandler extends CommandHandler {
         if (!operatorWide)
             switch (c.action()) {
                 case ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY, RESTAURANT_QUEUE, SET_RESTAURANT_STATUS,
-                        PUT_MENU_ITEM -> {
+                        PUT_MENU_ITEM, DELETE_MENU_ITEM -> {
                     if (!restaurants.require(id).ownerId().equals(user.id()))
                         throw new SecurityException("Restaurant ownership required");
                 }

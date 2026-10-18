@@ -35,6 +35,8 @@ public final class SugarRush {
     public static SugarRush fromSeed(Path path) throws IOException {
         SugarRush app = new SugarRush();
         new SeedLoader().load(path, app.registration, app.restaurants);
+        if (path.getFileName().toString().equals("live.properties"))
+            app.restaurants.useStore(Path.of("backend/data/restaurants.properties"));
         Properties properties = new Properties();
         try (Reader reader = Files.newBufferedReader(path)) {
             properties.load(reader);
@@ -64,24 +66,32 @@ public final class SugarRush {
         return authentication.login(username, password);
     }
 
-    public synchronized Session firebaseSession(String uid, String email) {
+    public synchronized Session firebaseSession(String uid, String email, Role selectedRole) {
         if (uid == null || uid.isBlank())
             throw new SecurityException("Verified Firebase UID required");
         Session current = firebaseSessions.get(uid);
         if (current != null) {
             try {
-                authentication.verify(current.token());
-                return current;
+                User existing = authentication.verify(current.token());
+                User approvedAccount = firebaseAccounts.get(uid);
+                Role expectedRole = approvedAccount == null ? selectedRole : approvedAccount.role();
+                if (existing.role() == expectedRole) return current;
+                authentication.logout(current.token());
+                firebaseSessions.remove(uid);
             } catch (SecurityException expired) {
                 firebaseSessions.remove(uid);
             }
         }
         User approved = firebaseAccounts.get(uid);
-        User user = approved == null ? new User("firebase:" + uid, email, Role.CUSTOMER)
+        User user = approved == null ? new User("firebase:" + uid, email, selectedRole)
                 : new User(approved.id(), email, approved.role());
         Session session = authentication.openSession(user);
         firebaseSessions.put(uid, session);
         return session;
+    }
+
+    public synchronized Session firebaseSession(String uid, String email) {
+        return firebaseSession(uid, email, Role.CUSTOMER);
     }
 
     public synchronized Object execute(Command command) {

@@ -128,15 +128,17 @@ async function start() {
   }
 
   const port = await freePort(8080);
+  const envFile = await fs.readFile(path.join(ui, '.env.local'), 'utf8').catch(() => '');
+  const databaseUrl = process.env.VITE_FIREBASE_DATABASE_URL || envFile.match(/^VITE_FIREBASE_DATABASE_URL=(.*)$/m)?.[1]?.trim()?.replace(/^['"]|['"]$/g, '');
   const backend = spawnOwned(java, [
     '--add-modules',
     'jdk.httpserver',
     '-cp',
     output,
     'sugarrush.presentation.http.ApiServer',
-    'backend/config/demo.properties',
+    'backend/config/live.properties',
     String(port),
-  ]);
+  ], { env: { ...process.env, SUGARRUSH_DATABASE_URL: databaseUrl || '' } });
   backend.once('error', (error) => {
     console.error(error.message);
     shutdown(1);

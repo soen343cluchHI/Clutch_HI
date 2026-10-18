@@ -27,7 +27,7 @@ try {
     & java --add-modules jdk.httpserver `
         -cp $outputPath `
         sugarrush.presentation.http.ApiServer `
-        "backend/config/demo.properties" $Port
+        "backend/config/live.properties" $Port
 }
 finally {
     Pop-Location

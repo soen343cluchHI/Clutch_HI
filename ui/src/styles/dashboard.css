@@ -593,3 +593,14 @@
 .simulator-workspace.workspace-full-width {
   grid-template-columns: minmax(0, 1fr);
 }
+.profile-button { width: 44px; height: 44px; display: grid; place-items: center; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 50%; cursor: pointer; }
+.profile-button:hover, .profile-button:focus-visible { border-color: var(--accent); }
+.account-settings { justify-self: end; width: min(100%, 360px); }
+.account-settings .dash-section-title { margin: 0; }
+.delete-confirmation { display: grid; gap: 10px; }
+.btn-danger-outline { color: var(--danger); background: var(--surface); border: 1px solid var(--danger); }
+.btn-danger { color: white; background: var(--danger); border: 0; }
+.create-restaurant, .menu-editor { display: grid; gap: 12px; }
+.menu-editor { border-top: 1px solid var(--border); padding-top: 18px; }
+.menu-owner-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.menu-owner-actions .btn { height: 36px; padding: 0 10px; font-size: 12px; }

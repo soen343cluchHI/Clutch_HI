@@ -58,6 +58,10 @@ public final class Restaurant {
         menu.put(item.id(), item);
     }
 
+    public void removeItem(String id) {
+        if (menu.remove(id) == null) throw new IllegalArgumentException("Unknown menu item: " + id);
+    }
+
     public List<MenuItem> menu() {
         return List.copyOf(menu.values());
     }
