@@ -87,7 +87,7 @@ public final class ApiServer {
     }
 
     private void handle(HttpExchange exchange) throws IOException {
-        try (exchange) {
+        try {
             String origin = exchange.getRequestHeaders().getFirst("Origin");
             if (origin != null && origin.equals(System.getenv().getOrDefault("SUGARRUSH_ALLOWED_ORIGIN", "https://soen343-f701c.web.app"))) {
                 exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
@@ -187,6 +187,8 @@ public final class ApiServer {
             send(exchange, 400, Map.of("error", message(failure)));
         } catch (Exception failure) {
             send(exchange, 500, Map.of("error", "Unexpected server error"));
+        } finally {
+            exchange.close();
         }
     }
 

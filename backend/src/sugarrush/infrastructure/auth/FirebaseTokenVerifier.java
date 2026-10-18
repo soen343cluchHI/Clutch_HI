@@ -84,6 +84,9 @@ public final class FirebaseTokenVerifier {
             if (claims.containsKey("user_id") && !uid.equals(claims.get("user_id")))
                 throw invalid();
 
+            if (!Boolean.TRUE.equals(claims.get("email_verified")))
+                throw new SecurityException("Verify your email before using SugarRush.");
+
             String email = claims.get("email") instanceof String text && !text.isBlank() ? text : uid;
             return new Identity(uid, email);
 

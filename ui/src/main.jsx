@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createUserWithEmailAndPassword, deleteUser, EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { createUserWithEmailAndPassword, deleteUser, EmailAuthProvider, onAuthStateChanged, reauthenticateWithCredential, sendEmailVerification, sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { onValue, ref, remove, serverTimestamp, set } from 'firebase/database';
 import { auth, database, configurationError } from './firebase';
 import AuthLayout from './components/AuthLayout';
@@ -8,12 +8,15 @@ import AuthPage from './pages/AuthPage';
 import ProfileSetupPage from './pages/ProfileSetupPage';
 import DashboardPage from './pages/DashboardPage';
 import StatusPage from './pages/StatusPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
 import '@fontsource-variable/geist';
 import './styles/theme.css';
 import './styles/auth.css';
 
 function App() {
   const [user, setUser] = useState(null);
+  const [verified, setVerified] = useState(false);
+  const [verificationSent, setVerificationSent] = useState(false);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
@@ -31,6 +34,8 @@ function App() {
     const stopAuth = onAuthStateChanged(auth, (current) => {
       stopProfile();
       setUser(current);
+      setVerified(Boolean(current?.emailVerified));
+      setVerificationSent(false);
       setProfile(null);
       setProfileError('');
       setLoading(Boolean(current && database));
@@ -72,6 +77,7 @@ function App() {
       } else if (registering) {
         const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
         await saveProfile(credential.user);
+        await sendEmailVerification(credential.user);
       } else {
         await signInWithEmailAndPassword(auth, email.trim(), password);
       }
@@ -103,6 +109,36 @@ function App() {
     try {
       await sendPasswordResetEmail(auth, email.trim());
       setResetSent(true);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function checkVerification() {
+    setBusy(true);
+    setError('');
+    setVerificationSent(false);
+    try {
+      await user.reload();
+      if (!auth.currentUser.emailVerified) throw new Error('Your email is not verified yet. Open the link we sent you, then try again.');
+      await auth.currentUser.getIdToken(true);
+      setVerified(true);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function resendVerification() {
+    setBusy(true);
+    setError('');
+    setVerificationSent(false);
+    try {
+      await sendEmailVerification(user);
+      setVerificationSent(true);
     } catch (failure) {
       setError(failure.message);
     } finally {
@@ -164,6 +200,18 @@ function App() {
           }}
         />
       );
+    if (!verified)
+      return (
+        <VerifyEmailPage
+          email={user.email}
+          busy={busy}
+          error={error}
+          sent={verificationSent}
+          onCheck={checkVerification}
+          onResend={resendVerification}
+          onLogout={logout}
+        />
+      );
     if (profileError)
       return (
         <StatusPage
@@ -188,7 +236,7 @@ function App() {
     );
   }
 
-  const isDashboard = !configurationError && !loading && user && profile && !profileError;
+  const isDashboard = !configurationError && !loading && user && verified && profile && !profileError;
 
   return isDashboard ? screen() : <AuthLayout>{screen()}</AuthLayout>;
 }

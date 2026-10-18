@@ -37,6 +37,18 @@ public final class ArchitectureChecks {
         }
         check(!Action.menu(Role.COURIER).contains(Action.PLACE_ORDER), "Courier must not place orders");
         check(!Action.menu(Role.OPERATOR).contains(Action.ACCEPT_ORDER), "Operator must not accept orders");
+        check(!Action.menu(Role.CUSTOMER).contains(Action.MARK_READY), "Customer must not prepare orders");
+        check(!Action.menu(Role.RESTAURANT).contains(Action.PLACE_ORDER), "Staff must not place orders");
+        List<?> seeded = (List<?>) app.execute(new Command(operator.token(), Action.BROWSE_RESTAURANTS));
+        check(seeded.size() == 2, "Seed restaurants missing");
+        for (Object view : seeded) {
+            RestaurantService.View restaurant = (RestaurantService.View) view;
+            check(restaurant.status() == Restaurant.Status.OPEN, "Seed restaurant not open");
+            check(restaurant.menu().size() == 3, "Seed menu incomplete");
+            check(restaurant.menu().stream().allMatch(i -> i.status() == MenuItem.Status.AVAILABLE),
+                    "Seed item sold out");
+            check(restaurant.queueLength() == 0, "Seed queue not empty");
+        }
         // Arrange the preconditions here instead of relying on the demo seed's starting state.
         app.execute(new Command(staff.token(), Action.PUT_MENU_ITEM, "sugar-shop", null, null, null, null,
                 new MenuItem("cookie", "Cookie", new BigDecimal("3.00"), MenuItem.Status.SOLD_OUT)));
@@ -103,6 +115,43 @@ public final class ArchitectureChecks {
                 .execute(Command.order(staff.token(), Action.REJECT_ORDER, rejected.id(), "Kitchen unavailable"));
         check("Kitchen unavailable".equals(rejectedView.rejectionReason()), "Missing rejection reason");
         expect(IllegalStateException.class, () -> transition(app, staff.token(), Action.ACCEPT_ORDER, rejected.id()));
+        OrderService.View withdrawn = place(app, customer.token());
+        expect(SecurityException.class, () -> transition(app, operator.token(), Action.CANCEL_ORDER, withdrawn.id()));
+        expect(SecurityException.class, () -> transition(app, staff.token(), Action.CANCEL_ORDER, withdrawn.id()));
+        expect(SecurityException.class, () -> transition(app, courier.token(), Action.CANCEL_ORDER, withdrawn.id()));
+        OrderService.View withdrawnView = (OrderService.View) app
+                .execute(Command.order(customer.token(), Action.CANCEL_ORDER, withdrawn.id(), null));
+        check(withdrawnView.state().equals("Cancelled"), "Customer cannot cancel placed order");
+        expect(SecurityException.class, () -> transition(app, customer.token(), Action.CANCEL_ORDER, withdrawn.id()));
+        expect(IllegalStateException.class,
+                () -> transition(app, operator.token(), Action.CANCEL_ORDER, withdrawn.id()));
+        OrderService.View accepted = place(app, customer.token());
+        transition(app, staff.token(), Action.ACCEPT_ORDER, accepted.id());
+        expect(SecurityException.class, () -> transition(app, customer.token(), Action.CANCEL_ORDER, accepted.id()));
+        transition(app, operator.token(), Action.CANCEL_ORDER, accepted.id());
+        check(queue(app, staff.token()).isEmpty(), "Cancelled order remains queued");
+        OrderService.View head = place(app, customer.token());
+        OrderService.View behind = place(app, customer.token());
+        transition(app, staff.token(), Action.ACCEPT_ORDER, head.id());
+        transition(app, staff.token(), Action.ACCEPT_ORDER, behind.id());
+        expect(IllegalStateException.class, () -> transition(app, staff.token(), Action.MARK_READY, behind.id()));
+        transition(app, staff.token(), Action.START_PREPARING, head.id());
+        transition(app, operator.token(), Action.CANCEL_ORDER, head.id());
+        check(queue(app, staff.token()).equals(List.of(behind.id())), "Cancellation broke arrival order");
+        transition(app, staff.token(), Action.START_PREPARING, behind.id());
+        transition(app, staff.token(), Action.MARK_READY, behind.id());
+        expect(IllegalStateException.class, () -> transition(app, operator.token(), Action.CANCEL_ORDER, behind.id()));
+        OrderService.View skipping = place(app, customer.token());
+        expect(IllegalStateException.class,
+                () -> transition(app, staff.token(), Action.START_PREPARING, skipping.id()));
+        expect(IllegalStateException.class, () -> transition(app, staff.token(), Action.MARK_READY, skipping.id()));
+        transition(app, staff.token(), Action.ACCEPT_ORDER, skipping.id());
+        expect(IllegalStateException.class, () -> transition(app, staff.token(), Action.MARK_READY, skipping.id()));
+        transition(app, staff.token(), Action.START_PREPARING, skipping.id());
+        expect(IllegalStateException.class,
+                () -> transition(app, staff.token(), Action.START_PREPARING, skipping.id()));
+        transition(app, staff.token(), Action.MARK_READY, skipping.id());
+        check(queue(app, staff.token()).isEmpty(), "Ready order remains queued");
         expect(SecurityException.class, () -> app.execute(
                 new Command(other.token(), Action.RESTAURANT_QUEUE, "sugar-shop", null, null, null, null, null)));
         expect(SecurityException.class, () -> app.execute(new Command(other.token(), Action.PUT_MENU_ITEM, "sugar-shop",
@@ -127,18 +176,26 @@ public final class ArchitectureChecks {
                 "Customer can see another user's orders");
         check(((List<?>) app.execute(new Command(other.token(), Action.LIST_ORDERS))).isEmpty(),
                 "Staff can see another restaurant's orders");
-        check(((List<?>) app.execute(new Command(customer.token(), Action.LIST_ORDERS))).size() == 3,
+        check(((List<?>) app.execute(new Command(customer.token(), Action.LIST_ORDERS))).size() == 8,
                 "Missing customer orders");
+        expect(SecurityException.class,
+                () -> transition(app, anotherSession.token(), Action.CANCEL_ORDER, first.id()));
         Map<?, ?> dashboard = (Map<?, ?>) app.execute(new Command(operator.token(), Action.DASHBOARD));
         check("Ready".equals(dashboard.get(first.id())), "Dashboard not updated");
         check("Rejected".equals(dashboard.get(rejected.id())), "Rejection not observed");
+        check("Cancelled".equals(dashboard.get(head.id())), "Cancellation not observed");
         Set<UUID> ids = new HashSet<>();
+        Map<String, String> latest = new HashMap<>();
         List<OrderEvent> events = events(app, operator.token());
         for (OrderEvent event : events) {
             check(ids.add(event.eventId()), "Duplicate event ID");
             check(event.timestamp() != null, "Missing timestamp");
+            check(Objects.equals(latest.put(event.orderId(), event.newState()), event.previousState()),
+                    "Event skipped a lifecycle state");
         }
-        check(events.size() == 10, "Incorrect event count");
+        check(events.size() == 27, "Incorrect event count");
+        check(events.stream().filter(e -> e.newState().equals("Cancelled")).count() == 3,
+                "Cancellation events missing");
         check(events.get(0).previousState() == null && events.get(0).newState().equals("Placed"),
                 "Creation event missing");
         List<?> commands = (List<?>) app.execute(new Command(operator.token(), Action.COMMAND_LOG));

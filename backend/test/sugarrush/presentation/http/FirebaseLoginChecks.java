@@ -41,6 +41,12 @@ public final class FirebaseLoginChecks {
         rejected(() -> verifier.verify(signed("{\"alg\":\"RS256\",\"kid\":\"test-key\"}",
                 claims("a", "a@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60)
                         .replace("https://securetoken.google.com/", "https://forged.example/"))));
+        rejected(() -> verifier.verify(signed("{\"alg\":\"RS256\",\"kid\":\"test-key\"}",
+                claims("a", "a@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60)
+                        .replace("\"email_verified\":true", "\"email_verified\":false"))));
+        rejected(() -> verifier.verify(signed("{\"alg\":\"RS256\",\"kid\":\"test-key\"}",
+                claims("a", "a@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60)
+                        .replace("\"email_verified\":true,", ""))));
         try {
             Json.object("{\"sub\":\"a\",\"sub\":\"b\"}");
             throw new AssertionError("Duplicate JSON claims accepted");
@@ -229,7 +235,7 @@ public final class FirebaseLoginChecks {
     }
 
     private static String claims(String uid, String email, String audience, long exp, long iat, long auth) {
-        return "{\"sub\":\"" + uid + "\",\"email\":\"" + email + "\",\"aud\":\"" + audience
+        return "{\"sub\":\"" + uid + "\",\"email\":\"" + email + "\",\"email_verified\":true,\"aud\":\"" + audience
                 + "\",\"iss\":\"https://securetoken.google.com/" + PROJECT + "\",\"exp\":" + exp + ",\"iat\":" + iat
                 + ",\"auth_time\":" + auth + "}";
     }
