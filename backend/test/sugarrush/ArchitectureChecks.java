@@ -73,6 +73,10 @@ public final class ArchitectureChecks {
   expect(SecurityException.class,()->app.execute(new Command(other.token(),Action.PUT_MENU_ITEM,"sugar-shop",null,null,null,null,new MenuItem("cake","Cake",BigDecimal.ONE,MenuItem.Status.AVAILABLE))));
   app.execute(new Command(staff.token(),Action.PUT_MENU_ITEM,"sugar-shop",null,null,null,null,new MenuItem("cake","Cake",BigDecimal.ONE,MenuItem.Status.AVAILABLE)));
   check(first.total().equals(new BigDecimal("17.00")),"Menu editing changed historical price");
+  expect(SecurityException.class,()->app.execute(new Command(other.token(),Action.SET_RESTAURANT_STATUS,"sugar-shop",null,null,null,Restaurant.Status.PAUSED,null)));
+  expect(SecurityException.class,()->app.execute(new Command(customer.token(),Action.SET_RESTAURANT_STATUS,"sugar-shop",null,null,null,Restaurant.Status.PAUSED,null)));
+  expect(SecurityException.class,()->app.execute(new Command(courier.token(),Action.SET_RESTAURANT_STATUS,"sugar-shop",null,null,null,Restaurant.Status.PAUSED,null)));
+  app.execute(new Command(operator.token(),Action.SET_RESTAURANT_STATUS,"other-shop",null,null,null,Restaurant.Status.PAUSED,null));
   app.execute(new Command(staff.token(),Action.SET_RESTAURANT_STATUS,"sugar-shop",null,null,null,Restaurant.Status.CLOSED,null));
   expect(IllegalStateException.class,()->place(app,customer.token()));
   User another=app.register("another","password",List.of(Role.CUSTOMER));

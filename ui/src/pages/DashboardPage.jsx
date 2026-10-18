@@ -130,6 +130,13 @@ export default function DashboardPage({ firebaseUser, email, onLogout, busy: aut
     });
   }
 
+  function setRestaurantStatus(status) {
+    run(async () => {
+      await send(session, 'SET_RESTAURANT_STATUS', { restaurantId, status });
+      await refresh(session);
+    });
+  }
+
   async function signOut() {
     await run(async () => {
       if (session) {
@@ -186,6 +193,12 @@ export default function DashboardPage({ firebaseUser, email, onLogout, busy: aut
           <div><strong>{restaurantOrders.filter(o => o.state === 'Ready').length}</strong><span>Ready*</span></div>
         </div>
         <p className="dash-muted">*Counts cover the orders visible to your account.</p>
+        {canExecute(session, 'SET_RESTAURANT_STATUS') && <div className="order-actions">
+          {restaurant.status === 'OPEN'
+            ? <button className="btn btn-secondary" disabled={disabled} onClick={() => setRestaurantStatus('PAUSED')}>Pause restaurant</button>
+            : <button className="btn btn-primary" disabled={disabled} onClick={() => setRestaurantStatus('OPEN')}>Reopen restaurant</button>}
+          <p className="dash-muted">Pausing stops new orders. Orders already accepted can still be prepared.</p>
+        </div>}
         <form onSubmit={place}>
           <h3>Menu</h3>
           {!restaurant.menu.length && <p>The menu is empty.</p>}

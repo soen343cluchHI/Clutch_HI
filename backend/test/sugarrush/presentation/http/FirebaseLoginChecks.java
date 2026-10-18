@@ -75,6 +75,21 @@ public final class FirebaseLoginChecks {
             check(request(base, "/api/firebase-session", admin, Map.of()).object().get("role").equals("OPERATOR"), "Approved operator mapping lost");
             check(command(base, admin, "EVENT_LOG", Map.of()).array().size() == 4, "Transition events missing");
             check(command(base, customer, "EVENT_LOG", Map.of()).status == 403, "Customer received operator events");
+            String accepted = (String) command(base, second, "PLACE_ORDER", Map.of("restaurantId", "sugar-shop", "item.cake", "1")).object().get("id");
+            check(command(base, staff, "ACCEPT_ORDER", Map.of("orderId", accepted)).status == 200, "Staff cannot accept before pausing");
+            check(command(base, staff, "SET_RESTAURANT_STATUS", Map.of("restaurantId", "sugar-shop", "status", "PAUSED")).status == 200, "Staff cannot pause own restaurant");
+            check(command(base, second, "PLACE_ORDER", Map.of("restaurantId", "sugar-shop", "item.cake", "1")).status == 400, "Paused restaurant accepted a new order");
+            for (String action : List.of("START_PREPARING", "MARK_READY")) {
+                check(command(base, staff, action, Map.of("orderId", accepted)).status == 200, "Accepted order blocked by pause");
+            }
+            check(command(base, staff, "SET_RESTAURANT_STATUS", Map.of("restaurantId", "other-shop", "status", "PAUSED")).status == 403, "Staff paused another restaurant");
+            check(command(base, customer, "SET_RESTAURANT_STATUS", Map.of("restaurantId", "sugar-shop", "status", "OPEN")).status == 403, "Customer changed restaurant status");
+            check(command(base, admin, "SET_RESTAURANT_STATUS", Map.of("restaurantId", "sugar-shop", "status", "BROKEN")).status == 400, "Invalid status accepted");
+            check(command(base, admin, "SET_RESTAURANT_STATUS", Map.of("restaurantId", "sugar-shop")).status == 400, "Missing status accepted");
+            check(command(base, admin, "SET_RESTAURANT_STATUS", Map.of("restaurantId", "other-shop", "status", "CLOSED")).status == 200, "Operator cannot close any restaurant");
+            check(command(base, second, "PLACE_ORDER", Map.of("restaurantId", "other-shop", "item.vanilla", "1")).status == 400, "Closed restaurant accepted a new order");
+            check(command(base, admin, "SET_RESTAURANT_STATUS", Map.of("restaurantId", "sugar-shop", "status", "OPEN")).status == 200, "Operator cannot reopen any restaurant");
+            check(command(base, second, "PLACE_ORDER", Map.of("restaurantId", "sugar-shop", "item.cake", "1")).status == 200, "Reopened restaurant rejected an order");
             check(command(base, customer, "LOGOUT", Map.of()).status == 200, "Internal logout failed");
             check(command(base, renewed, "LIST_ORDERS", Map.of()).array().size() == 1, "Firebase re-login lost order ownership");
             System.out.println("Passed " + checks + " Firebase identity, cryptographic and HTTP checks.");

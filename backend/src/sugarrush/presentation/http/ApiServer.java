@@ -12,6 +12,7 @@ import java.time.temporal.TemporalAccessor;
 import java.util.*;
 import sugarrush.application.SugarRush;
 import sugarrush.application.commands.*;
+import sugarrush.domain.restaurant.Restaurant;
 import sugarrush.domain.user.Session;
 import sugarrush.infrastructure.auth.FirebaseTokenVerifier;
 import java.nio.file.Files;
@@ -91,6 +92,8 @@ public final class ApiServer {
             }
             Command command = switch (action) {
                 case RESTAURANT_QUEUE -> new Command(token, action, required(fields, "restaurantId"), null, null, null, null, null);
+                case SET_RESTAURANT_STATUS -> new Command(token, action, required(fields, "restaurantId"), null, null, null,
+                    Restaurant.Status.valueOf(required(fields, "status")), null);
                 case PLACE_ORDER -> Command.place(token, required(fields, "restaurantId"), items);
                 case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY ->
                     Command.order(token, action, required(fields, "orderId"), fields.get("reason"));

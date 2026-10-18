@@ -23,7 +23,10 @@ public final class ExecutionHandler extends CommandHandler {
   case PLACE_ORDER->orders.place(user,c.restaurantId(),c.items());
   case CANCEL_ORDER,ACCEPT_ORDER,REJECT_ORDER,START_PREPARING,MARK_READY->orders.transition(c.orderId(),c.action().name(),c.reason());
   case RESTAURANT_QUEUE->restaurants.require(c.restaurantId()).queue().snapshot();
-  case SET_RESTAURANT_STATUS->{restaurants.require(c.restaurantId()).changeStatus(c.status());yield "Status updated";}
+  case SET_RESTAURANT_STATUS->{
+   if(c.status()==null) throw new IllegalArgumentException("Status required");
+   restaurants.require(c.restaurantId()).changeStatus(c.status());yield "Status updated";
+  }
   case PUT_MENU_ITEM->{
    if(c.menuItem()==null) throw new IllegalArgumentException("Menu item required");
    restaurants.require(c.restaurantId()).putItem(c.menuItem());yield "Menu updated";
