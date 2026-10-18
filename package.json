@@ -3,6 +3,7 @@
     "firebase": "^13.0.0"
   },
   "scripts": {
-    "dev": "node start.cjs"
+    "dev": "node start.cjs",
+    "build": "npm ci --prefix ui && npm run build --prefix ui"
   }
 }
