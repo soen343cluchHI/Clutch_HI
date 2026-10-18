@@ -10,5 +10,9 @@ const friendlyMessages = {
 export default function FormAlert({ message }) {
   if (!message) return null;
   const code = message.match(/\(auth\/([\w-]+)\)/)?.[1];
-  return <p className="form-alert" role="alert">{friendlyMessages[code] ?? message}</p>;
+  return (
+    <p className="form-alert" role="alert">
+      {friendlyMessages[code] ?? message}
+    </p>
+  );
 }

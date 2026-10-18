@@ -25,28 +25,37 @@ function App() {
 
   useEffect(() => {
     let stopProfile = () => {};
-    const stopAuth = onAuthStateChanged(auth, current => {
+    const stopAuth = onAuthStateChanged(auth, (current) => {
       stopProfile();
       setUser(current);
       setProfile(null);
       setProfileError('');
       setLoading(Boolean(current && database));
       if (current && database) {
-        stopProfile = onValue(ref(database, `users/${current.uid}`), snapshot => {
-          setProfile(snapshot.val());
-          setLoading(false);
-        }, failure => {
-          setProfileError(failure.message);
-          setLoading(false);
-        });
+        stopProfile = onValue(
+          ref(database, `users/${current.uid}`),
+          (snapshot) => {
+            setProfile(snapshot.val());
+            setLoading(false);
+          },
+          (failure) => {
+            setProfileError(failure.message);
+            setLoading(false);
+          },
+        );
       }
     });
-    return () => { stopAuth(); stopProfile(); };
+    return () => {
+      stopAuth();
+      stopProfile();
+    };
   }, []);
 
   async function saveProfile(current) {
     await set(ref(database, `users/${current.uid}`), {
-      email: current.email, role: 'Customer', createdAt: serverTimestamp(),
+      email: current.email,
+      role: 'Customer',
+      createdAt: serverTimestamp(),
     });
   }
 
@@ -74,30 +83,61 @@ function App() {
   async function logout() {
     setBusy(true);
     setError('');
-    try { await signOut(auth); } catch (failure) { setError(failure.message); }
-    finally { setBusy(false); }
+    try {
+      await signOut(auth);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
   }
 
   function screen() {
     if (configurationError) return <StatusPage title="Setup required" message={configurationError} />;
     if (loading) return <StatusPage loading />;
-    if (!user) return <AuthPage
-      registering={registering} email={email} setEmail={setEmail} password={password} setPassword={setPassword}
-      busy={busy} error={error} onSubmit={submit}
-      onToggleMode={() => { setRegistering(!registering); setError(''); }} />;
-    if (profileError) return <StatusPage title="Profile unavailable" message={`Could not load your profile: ${profileError}`} busy={busy} error={error} onLogout={logout} />;
+    if (!user)
+      return (
+        <AuthPage
+          registering={registering}
+          email={email}
+          setEmail={setEmail}
+          password={password}
+          setPassword={setPassword}
+          busy={busy}
+          error={error}
+          onSubmit={submit}
+          onToggleMode={() => {
+            setRegistering(!registering);
+            setError('');
+          }}
+        />
+      );
+    if (profileError)
+      return (
+        <StatusPage
+          title="Profile unavailable"
+          message={`Could not load your profile: ${profileError}`}
+          busy={busy}
+          error={error}
+          onLogout={logout}
+        />
+      );
     if (!profile) return <ProfileSetupPage busy={busy} error={error} onSubmit={submit} onLogout={logout} />;
-    return <DashboardPage key={user.uid} firebaseUser={user} email={user.email} busy={busy} error={error} onLogout={logout} />;
+    return (
+      <DashboardPage
+        key={user.uid}
+        firebaseUser={user}
+        email={user.email}
+        busy={busy}
+        error={error}
+        onLogout={logout}
+      />
+    );
   }
 
-  const isDashboard =
-  !configurationError &&
-  !loading &&
-  user &&
-  profile &&
-  !profileError;
+  const isDashboard = !configurationError && !loading && user && profile && !profileError;
 
-return isDashboard ? screen() : <AuthLayout>{screen()}</AuthLayout>;
+  return isDashboard ? screen() : <AuthLayout>{screen()}</AuthLayout>;
 }
 
 createRoot(document.getElementById('root')).render(<App />);
