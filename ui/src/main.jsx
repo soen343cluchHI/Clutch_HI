@@ -21,6 +21,7 @@ function App() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
+  const [signupRole, setSignupRole] = useState('Customer');
   const [resettingPassword, setResettingPassword] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [email, setEmail] = useState('');
@@ -69,6 +70,10 @@ function App() {
 
   async function submit(event) {
     event.preventDefault();
+    if (!user && registering && signupRole !== 'Customer') {
+      setError('Restaurant and courier registration is not available yet. No account was created.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -170,6 +175,8 @@ function App() {
       return (
         <AuthPage
           registering={registering}
+          signupRole={signupRole}
+          onSignupRoleChange={value => { setSignupRole(value); setError(''); }}
           resettingPassword={resettingPassword}
           resetSent={resetSent}
           email={email}
@@ -193,6 +200,7 @@ function App() {
           }}
           onToggleMode={() => {
             setRegistering(!registering);
+            setSignupRole('Customer');
             setError('');
             setResetSent(false);
           }}
