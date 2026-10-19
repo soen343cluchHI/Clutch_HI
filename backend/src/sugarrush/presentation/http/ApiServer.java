@@ -50,6 +50,7 @@ public final class ApiServer {
 
     public static void main(String[] args) throws IOException {
         Path seed = Path.of(args.length > 0 ? args[0] : "backend/config/live.properties");
+        System.out.println("SugarRush account configuration: " + seed.toAbsolutePath());
         int port = args.length > 1 ? Integer.parseInt(args[1])
                 : Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
         Properties settings = new Properties();
@@ -141,7 +142,7 @@ public final class ApiServer {
                 return;
             }
             if (remoteRestaurants) loadRestaurants(authorization.substring(7));
-            Session session = application.firebaseSession(identity.uid(), identity.email(), profileRole(identity.uid(), identity.email(), authorization.substring(7)));
+            Session session = application.firebaseSession(identity.uid(), identity.email());
             String token = session.token();
             if (path.equals("/api/firebase-session")) {
                 send(exchange, 200, application.execute(new Command(token, Action.SESSION_INFO)));

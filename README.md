@@ -1,7 +1,9 @@
 # Clutch_HI
 Repository for SOEN343 project. Team name is Clutch_HI
 
-Restaurant accounts can create their own restaurants in the dashboard and edit menu items, availability, and restaurant status. The running backend loads `backend/config/live.properties` (which contains no demo restaurants) and saves owner-created restaurants in `backend/data/restaurants.properties`. Sign in with the same Firebase email and password to manage them again. `backend/config/demo.properties` remains for backend checks.
+Run `npm run dev` to start the frontend and Java backend with Firebase login, approved UID mappings, and the seeded Pastry Montreal and Nice Ice restaurants from `backend/config/demo.properties`. Demo orders and changes reset when the backend restarts.
+
+For the persistent restaurant configuration, run `SUGARRUSH_SEED=backend/config/live.properties npm run dev`. That configuration contains no seeded restaurants and saves owner-created restaurants in `backend/data/restaurants.properties`.
 
 Team members:
 

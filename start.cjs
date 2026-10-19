@@ -136,7 +136,7 @@ async function start() {
     '-cp',
     output,
     'sugarrush.presentation.http.ApiServer',
-    'backend/config/live.properties',
+    process.env.SUGARRUSH_SEED || 'backend/config/demo.properties',
     String(port),
   ], { env: { ...process.env, SUGARRUSH_DATABASE_URL: databaseUrl || '' } });
   backend.once('error', (error) => {

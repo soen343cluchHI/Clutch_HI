@@ -71,6 +71,7 @@ public final class SugarRush {
         return authentication.login(username, password);
     }
 
+    // Profile roles cannot grant privileges; only configured UID mappings can.
     public synchronized Session firebaseSession(String uid, String email, Role selectedRole) {
         if (uid == null || uid.isBlank())
             throw new SecurityException("Verified Firebase UID required");
@@ -79,7 +80,7 @@ public final class SugarRush {
             try {
                 User existing = authentication.verify(current.token());
                 User approvedAccount = firebaseAccounts.get(uid);
-                Role expectedRole = approvedAccount == null ? selectedRole : approvedAccount.role();
+                Role expectedRole = approvedAccount == null ? Role.CUSTOMER : approvedAccount.role();
                 if (existing.role() == expectedRole) return current;
                 authentication.logout(current.token());
                 firebaseSessions.remove(uid);
@@ -88,7 +89,7 @@ public final class SugarRush {
             }
         }
         User approved = firebaseAccounts.get(uid);
-        User user = approved == null ? new User("firebase:" + uid, email, selectedRole)
+        User user = approved == null ? new User("firebase:" + uid, email, Role.CUSTOMER)
                 : new User(approved.id(), email, approved.role());
         Session session = authentication.openSession(user);
         firebaseSessions.put(uid, session);

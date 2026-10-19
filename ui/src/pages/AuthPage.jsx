@@ -3,24 +3,16 @@ import FormAlert from '../components/FormAlert';
 
 export default function AuthPage({ registering, resettingPassword, resetSent, email, setEmail, password,
   setPassword, busy, error, onSubmit, onResetPassword, onForgotPassword, onBackToSignIn,
-  onToggleMode, role, setRole }) {
+  onToggleMode }) {
   return (
     <section className="panel" key={resettingPassword ? 'reset' : registering ? 'register' : 'login'}>
       <header className="panel-header">
         <h1>{resettingPassword ? 'Reset your password' : registering ? 'Create your account' : 'Sign in'}</h1>
         <p>{resettingPassword ? 'Enter your email and we’ll send you a link to reset your password.'
-          : registering ? 'Choose how you want to use SugarRush.'
+          : registering ? 'Create a customer account to browse restaurants and place orders.'
             : 'Welcome back. Sign in with your email and password.'}</p>
       </header>
       <form className="stack" onSubmit={resettingPassword ? onResetPassword : onSubmit}>
-        {registering && !resettingPassword && <fieldset className="role-picker">
-          <legend>Account type</legend><div className="role-grid">
-            {['Customer', 'Restaurant', 'Courier', 'Operator'].map((option) => <label className="role-option" key={option}>
-              <input type="radio" name="role" value={option} checked={role === option} onChange={() => setRole(option)} disabled={busy} />
-              <span className="role-name">{option}</span>
-            </label>)}
-          </div>
-        </fieldset>}
         <Field label="Email" type="email" name="email" autoComplete="email" spellCheck={false} required value={email} onChange={(e) => setEmail(e.target.value)} />
         {!resettingPassword && <Field label="Password" type="password" name="password" required
           autoComplete={registering ? 'new-password' : 'current-password'} minLength={registering ? 6 : undefined}
