@@ -10,6 +10,7 @@ import DashboardPage from './pages/DashboardPage';
 import StatusPage from './pages/StatusPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import '@fontsource-variable/geist';
+import '@fontsource-variable/fraunces/full-italic.css';
 import './styles/theme.css';
 import './styles/auth.css';
 

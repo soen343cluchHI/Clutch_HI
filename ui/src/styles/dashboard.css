@@ -487,8 +487,8 @@
   background: #e0f3e7;
 }
 .status-paused {
-  color: #a82f19;
-  background: #fbe9e5;
+  color: var(--accent);
+  background: var(--accent-soft);
 }
 .status-closed {
   color: var(--text-muted);

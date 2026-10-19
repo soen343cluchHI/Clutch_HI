@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import CustomerView from '../components/CustomerView';
+import Logo from '../components/Logo';
 import SimulatorMap, { queueBand } from '../components/SimulatorMap';
 import * as api from '../services/dashboardApi';
 import { canExecute, loadWorkspace, workspaceActions } from '../services/dashboardWorkspace';
 import '../styles/dashboard.css';
 
 const roleTabs = {
-  CUSTOMER: ['Map', 'Orders', 'History'],
   RESTAURANT: ['Restaurant', 'Orders'],
   OPERATOR: ['Orders', 'Map', 'History'],
   COURIER: ['Workspace', 'Map'],
@@ -33,7 +34,6 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
   const [itemName, setItemName] = useState('');
   const [itemPrice, setItemPrice] = useState('');
   const [editingItemId, setEditingItemId] = useState('');
-  const [quantities, setQuantities] = useState({});
   const [reasons, setReasons] = useState({});
   const [logs, setLogs] = useState([]);
   const [error, setError] = useState('');
@@ -104,7 +104,6 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
       setOrders([]);
       setQueues({});
       setRestaurantId('');
-      setQuantities({});
       setReasons({});
       let current;
       try {
@@ -126,22 +125,15 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
     connectAccount();
   }, [firebaseUser]);
 
-  function place(event) {
-    event.preventDefault();
+  function placeOrder(id, items, onPlaced) {
     run(async () => {
-      const selected = restaurant.menu.filter((item) => Number(quantities[item.id]) > 0);
-      if (!selected.length) {
-        log('PLACE_ORDER', false, 'Choose at least one item.');
-        throw new Error('Choose at least one item.');
-      }
-      const fields = { restaurantId };
-      selected.forEach((item) => {
-        fields[`item.${item.id}`] = quantities[item.id];
+      const fields = { restaurantId: id };
+      Object.entries(items).forEach(([itemId, quantity]) => {
+        fields[`item.${itemId}`] = quantity;
       });
       await send(session, 'PLACE_ORDER', fields);
-      setQuantities({});
+      onPlaced();
       await refresh(session);
-      setTab('Orders');
     });
   }
 
@@ -223,13 +215,6 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
   const role = session?.user.role;
   const displayedOrders =
     role === 'RESTAURANT' ? orders.filter((order) => order.restaurantId === restaurantId) : orders;
-  const total =
-    restaurant?.menu.reduce((sum, item) => sum + Number(item.price) * (Number(quantities[item.id]) || 0), 0) || 0;
-  const selected = restaurant?.menu.filter((item) => Number(quantities[item.id]) > 0) || [];
-  const canPlace =
-    restaurant?.status === 'OPEN' &&
-    selected.length > 0 &&
-    selected.every((item) => item.status === 'AVAILABLE' && Number.isInteger(Number(quantities[item.id])));
   const disabled = busy || authBusy;
 
   const normalise = (value) =>
@@ -243,23 +228,12 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
   const restaurantOrders = orders.filter((o) => o.restaurantId === restaurantId);
   const tabs = roleTabs[role] || [];
   const activeTab = tabs.includes(tab) ? tab : tabs[0];
-  const showSidebar = role === 'RESTAURANT' || (role === 'CUSTOMER' && activeTab === 'Map');
+  const showSidebar = role === 'RESTAURANT';
   const tabLabel = (name) =>
-    name === 'Map'
-      ? role === 'CUSTOMER'
-        ? 'Browse restaurants'
-        : 'Map'
-      : name === 'Orders'
-        ? role === 'CUSTOMER'
-          ? 'My orders'
-          : role === 'OPERATOR'
-            ? 'All orders'
-            : 'Restaurant orders'
-        : name;
+    name === 'Orders' ? (role === 'OPERATOR' ? 'All orders' : 'Restaurant orders') : name;
 
   function selectRestaurant(id) {
     setRestaurantId((previous) => (previous === id ? '' : id));
-    setQuantities({});
     setTab(role === 'RESTAURANT' ? 'Restaurant' : 'Map');
   }
 
@@ -310,7 +284,7 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
                 <p className="dash-muted">Pausing stops new orders. Orders already accepted can still be prepared.</p>
               </div>
             )}
-            <form onSubmit={place}>
+            <div>
               <h3>Menu</h3>
               {!restaurant.menu.length && <p>The menu is empty.</p>}
               <ul className="menu-list">
@@ -322,25 +296,6 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
                         {money(item.price)} · {item.status === 'SOLD_OUT' ? 'Sold out' : 'Available'}
                       </p>
                     </div>
-                    {role === 'CUSTOMER' && (
-                      <label className="quantity">
-                        Qty
-                        <input
-                          type="number"
-                          min="0"
-                          max="99"
-                          step="1"
-                          value={quantities[item.id] ?? 0}
-                          disabled={disabled || item.status !== 'AVAILABLE' || restaurant.status !== 'OPEN'}
-                          onChange={(e) =>
-                            setQuantities((current) => ({
-                              ...current,
-                              [item.id]: e.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-                    )}
                     {role === 'RESTAURANT' && <div className="menu-owner-actions">
                       <button className="btn btn-secondary" type="button" disabled={disabled} onClick={() => { setEditingItemId(item.id); setItemName(item.name); setItemPrice(String(item.price)); }}>Edit</button>
                       <button className="btn btn-secondary" type="button" disabled={disabled} onClick={() => changeItemStatus(item)}>{item.status === 'AVAILABLE' ? 'Mark sold out' : 'Mark available'}</button>
@@ -349,16 +304,7 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
                   </li>
                 ))}
               </ul>
-              {role === 'CUSTOMER' && (
-                <div className="checkout">
-                  <strong>Item subtotal: {money(total)}</strong>
-                  <button className="btn btn-primary" type="submit" disabled={disabled || !canPlace}>
-                    Place order
-                  </button>
-                  {restaurant.status !== 'OPEN' && <p>This restaurant is not accepting new orders.</p>}
-                </div>
-              )}
-            </form>
+            </div>
             {role === 'RESTAURANT' && <form className="menu-editor" onSubmit={saveMenuItem}>
               <h3>{editingItemId ? 'Edit menu item' : 'Add menu item'}</h3>
               <label>Item name<input required maxLength="80" value={itemName} onChange={(e) => setItemName(e.target.value)} /></label>
@@ -410,8 +356,7 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
               </ul>
               <strong>{money(order.total)}</strong>
               {order.rejectionReason && <p>Reason: {order.rejectionReason}</p>}
-              {((role === 'CUSTOMER' && order.state === 'Placed') ||
-                (role === 'OPERATOR' && ['Accepted', 'Preparing'].includes(order.state))) && (
+              {role === 'OPERATOR' && ['Accepted', 'Preparing'].includes(order.state) && (
                 <div className="order-actions">
                   <button
                     className="btn btn-secondary"
@@ -485,7 +430,7 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
     <main className="dashboard">
       <header className="dash-header">
         <div>
-          <p className="dash-brand">SugarRush</p>
+          <Logo size={44} />
         </div>
         <div className="dash-account">
           <strong>{session ? `${session.user.username} · ${role}` : 'Loading your account...'}</strong>
@@ -509,7 +454,18 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
         </p>
       )}
 
-      {session && (
+      {role === 'CUSTOMER' && (
+        <CustomerView
+          restaurants={restaurants}
+          orders={orders}
+          disabled={disabled}
+          money={money}
+          onPlace={placeOrder}
+          onCancel={(order) => transition(order, 'CANCEL_ORDER')}
+          onRefresh={() => run(() => refresh(session))}
+        />
+      )}
+      {session && role !== 'CUSTOMER' && (
         <nav className="module-tabs" role="tablist" aria-label="Workspace sections">
           {tabs.map((name, index) => (
             <button
@@ -540,219 +496,205 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
           ))}
         </nav>
       )}
-      <div className="dash-toolbar">
-        <p>
-          <span className={`connection-dot ${session ? 'connected' : ''}`} />
-          {busy
-            ? 'Loading your workspace...'
-            : session
-              ? 'Your workspace is connected'
-              : 'The order server is not connected.'}
-        </p>
-        <button
-          className="btn btn-secondary"
-          disabled={disabled}
-          onClick={() => (session ? run(() => refresh(session)) : connectAccount())}
-        >
-          {busy ? 'Loading...' : session ? 'Refresh workspace' : 'Retry connection'}
-        </button>
-      </div>
-      <div className={`simulator-workspace${showSidebar ? '' : ' workspace-full-width'}`}>
-        {showSidebar && (
-          <aside className="dash-card restaurant-sidebar">
-            <h2>{role === 'RESTAURANT' ? 'Your restaurants' : 'Find a restaurant'}</h2>
-            {role === 'RESTAURANT' && <form className="create-restaurant" onSubmit={createRestaurant}>
-              <label>Restaurant name<input required maxLength="80" value={newRestaurantName} onChange={(e) => setNewRestaurantName(e.target.value)} placeholder="Your restaurant name" /></label>
-              <button className="btn btn-primary" disabled={disabled}>Create restaurant</button>
-            </form>}
+      {role !== 'CUSTOMER' && (
+        <>
+          <div className="dash-toolbar">
+            <p>
+              <span className={`connection-dot ${session ? 'connected' : ''}`} />
+              {busy
+                ? 'Loading your workspace...'
+                : session
+                  ? 'Your workspace is connected'
+                  : 'The order server is not connected.'}
+            </p>
+            <button
+              className="btn btn-secondary"
+              disabled={disabled}
+              onClick={() => (session ? run(() => refresh(session)) : connectAccount())}
+            >
+              {busy ? 'Loading...' : session ? 'Refresh workspace' : 'Retry connection'}
+            </button>
+          </div>
+          <div className={`simulator-workspace${showSidebar ? '' : ' workspace-full-width'}`}>
+            {showSidebar && (
+              <aside className="dash-card restaurant-sidebar">
+                <h2>{role === 'RESTAURANT' ? 'Your restaurants' : 'Find a restaurant'}</h2>
+                {role === 'RESTAURANT' && <form className="create-restaurant" onSubmit={createRestaurant}>
+                  <label>Restaurant name<input required maxLength="80" value={newRestaurantName} onChange={(e) => setNewRestaurantName(e.target.value)} placeholder="Your restaurant name" /></label>
+                  <button className="btn btn-primary" disabled={disabled}>Create restaurant</button>
+                </form>}
 
-            {role === 'CUSTOMER' && (
-              <label>
-                Search restaurants
-                <input
-                  type="search"
-                  placeholder="Search by restaurant name..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  disabled={!session}
-                />
-              </label>
-            )}
+                {!session ? (
+                  <p className="dash-muted">Loading restaurants...</p>
+                ) : hasSearch || role === 'RESTAURANT' ? (
+                  <>
+                    <p className="dash-muted">
+                      {filteredRestaurants.length} restaurant
+                      {filteredRestaurants.length === 1 ? '' : 's'} found
+                    </p>
 
-            {!session ? (
-              <p className="dash-muted">Loading restaurants...</p>
-            ) : hasSearch || role === 'RESTAURANT' || role === 'CUSTOMER' ? (
-              <>
-                <p className="dash-muted">
-                  {filteredRestaurants.length} restaurant
-                  {filteredRestaurants.length === 1 ? '' : 's'} found
-                </p>
-
-                <div className="restaurant-list">
-                  {filteredRestaurants.map((r) => (
-                    <button
-                      type="button"
-                      key={r.id}
-                      disabled={disabled}
-                      className={`restaurant-option ${r.id === restaurantId ? 'selected-restaurant' : ''}`}
-                      aria-pressed={r.id === restaurantId}
-                      onClick={() => selectRestaurant(r.id)}
-                    >
-                      <span className={`queue-dot queue-${queueBand(r)}`} />
-                      <span>
-                        <strong>{r.name}</strong>
-                        <small>{r.status.toLowerCase()}</small>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                {!filteredRestaurants.length && <p className="dash-empty">{role === 'RESTAURANT' ? 'Create your first restaurant above.' : 'No restaurants match your search.'}</p>}
-              </>
-            ) : (
-              <>
-                <h3>Restaurant of the week</h3>
-
-                {featuredRestaurant ? (
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    className="restaurant-option"
-                    onClick={() => selectRestaurant(featuredRestaurant.id)}
-                  >
-                    <span>
-                      <strong>{featuredRestaurant.name}</strong>
-                      <small>This week’s featured restaurant</small>
-                    </span>
-                  </button>
-                ) : (
-                  <p className="dash-muted">No featured restaurant this week.</p>
-                )}
-              </>
-            )}
-          </aside>
-        )}
-        <section
-          className="workspace-panel"
-          id="workspace-panel"
-          role={session ? 'tabpanel' : undefined}
-          aria-labelledby={session ? `module-tab-${tabs.indexOf(activeTab)}` : undefined}
-        >
-          {activeTab === 'Map' && (
-            <>
-              <div className="city-metrics">
-                <div>
-                  <span>Restaurants</span>
-                  <strong>{session ? restaurants.length : '—'}</strong>
-                </div>
-                <div>
-                  <span>Open now</span>
-                  <strong>{session ? restaurants.filter((r) => r.status === 'OPEN').length : '—'}</strong>
-                </div>
-                <div>
-                  <span>Visible orders</span>
-                  <strong>{session ? orders.length : '—'}</strong>
-                </div>
-                <div>
-                  <span>Queued orders</span>
-                  <strong>{session ? restaurants.reduce((sum, r) => sum + (r.queueLength || 0), 0) : '—'}</strong>
-                </div>
-              </div>
-              <section className="dash-card map-card">
-                <div className="dash-section-title">
-                  <div>
-                    <h2>City map</h2>
-                    <p className="dash-muted">Seeded coordinates · select a restaurant marker</p>
-                  </div>
-                  <label className="checkbox-label">
-                    <input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} />
-                    Show labels
-                  </label>
-                </div>
-                <SimulatorMap
-                  restaurants={restaurants}
-                  visibleRestaurants={filteredRestaurants}
-                  selectedId={restaurantId}
-                  onSelect={selectRestaurant}
-                  showLabels={showLabels}
-                  disabled={disabled}
-                />
-                <div className="map-legend">
-                  <span>
-                    <i className="queue-dot queue-short" />
-                    Short: 0–2 queued
-                  </span>
-                  <span>
-                    <i className="queue-dot queue-building" />
-                    Building: 3–5
-                  </span>
-                  <span>
-                    <i className="queue-dot queue-long" />
-                    Long: 6+ or paused
-                  </span>
-                </div>
-                <p className="dash-muted">
-                  Schematic grid, not a live street map. Courier positions are not included in your current seed.
-                </p>
-              </section>
-
-              {renderMenu()}
-            </>
-          )}
-          {activeTab === 'Restaurant' && renderMenu()}
-          {activeTab === 'Orders' && (
-            <>
-              {renderOrders()}
-              {role === 'CUSTOMER' && renderMenu()}
-            </>
-          )}
-          {activeTab === 'Workspace' && (
-            <section className="dash-card">
-              <h2>Courier orders</h2>
-              <p>Courier assignments are not implemented yet.</p>
-            </section>
-          )}
-          {activeTab === 'History' && (
-            <section className="dash-card">
-              <div>
-                <h2>Order history</h2>
-                <p className="dash-muted">
-                  Orders visible to your account. Amounts are item subtotals; billing fees and charges are not
-                  implemented yet.
-                </p>
-              </div>
-              {!orders.length ? (
-                <p className="dash-empty">
-                  {session ? 'No orders to display.' : 'Your history loads automatically after sign-in.'}
-                </p>
-              ) : (
-                <div className="history-table-wrap">
-                  <table className="history-table">
-                    <thead>
-                      <tr>
-                        <th>Order</th>
-                        <th>Restaurant</th>
-                        <th>State</th>
-                        <th>Item subtotal</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {orders.map((o) => (
-                        <tr key={o.id}>
-                          <td>{o.id.slice(0, 8)}</td>
-                          <td>{restaurants.find((r) => r.id === o.restaurantId)?.name || o.restaurantId}</td>
-                          <td>{o.state}</td>
-                          <td>{money(o.total)}</td>
-                        </tr>
+                    <div className="restaurant-list">
+                      {filteredRestaurants.map((r) => (
+                        <button
+                          type="button"
+                          key={r.id}
+                          disabled={disabled}
+                          className={`restaurant-option ${r.id === restaurantId ? 'selected-restaurant' : ''}`}
+                          aria-pressed={r.id === restaurantId}
+                          onClick={() => selectRestaurant(r.id)}
+                        >
+                          <span className={`queue-dot queue-${queueBand(r)}`} />
+                          <span>
+                            <strong>{r.name}</strong>
+                            <small>{r.status.toLowerCase()}</small>
+                          </span>
+                        </button>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </div>
+
+                    {!filteredRestaurants.length && <p className="dash-empty">{role === 'RESTAURANT' ? 'Create your first restaurant above.' : 'No restaurants match your search.'}</p>}
+                  </>
+                ) : (
+                  <>
+                    <h3>Restaurant of the week</h3>
+
+                    {featuredRestaurant ? (
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        className="restaurant-option"
+                        onClick={() => selectRestaurant(featuredRestaurant.id)}
+                      >
+                        <span>
+                          <strong>{featuredRestaurant.name}</strong>
+                          <small>This week’s featured restaurant</small>
+                        </span>
+                      </button>
+                    ) : (
+                      <p className="dash-muted">No featured restaurant this week.</p>
+                    )}
+                  </>
+                )}
+              </aside>
+            )}
+            <section
+              className="workspace-panel"
+              id="workspace-panel"
+              role={session ? 'tabpanel' : undefined}
+              aria-labelledby={session ? `module-tab-${tabs.indexOf(activeTab)}` : undefined}
+            >
+              {activeTab === 'Map' && (
+                <>
+                  <div className="city-metrics">
+                    <div>
+                      <span>Restaurants</span>
+                      <strong>{session ? restaurants.length : '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Open now</span>
+                      <strong>{session ? restaurants.filter((r) => r.status === 'OPEN').length : '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Visible orders</span>
+                      <strong>{session ? orders.length : '—'}</strong>
+                    </div>
+                    <div>
+                      <span>Queued orders</span>
+                      <strong>{session ? restaurants.reduce((sum, r) => sum + (r.queueLength || 0), 0) : '—'}</strong>
+                    </div>
+                  </div>
+                  <section className="dash-card map-card">
+                    <div className="dash-section-title">
+                      <div>
+                        <h2>City map</h2>
+                        <p className="dash-muted">Seeded coordinates · select a restaurant marker</p>
+                      </div>
+                      <label className="checkbox-label">
+                        <input type="checkbox" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} />
+                        Show labels
+                      </label>
+                    </div>
+                    <SimulatorMap
+                      restaurants={restaurants}
+                      visibleRestaurants={filteredRestaurants}
+                      selectedId={restaurantId}
+                      onSelect={selectRestaurant}
+                      showLabels={showLabels}
+                      disabled={disabled}
+                    />
+                    <div className="map-legend">
+                      <span>
+                        <i className="queue-dot queue-short" />
+                        Short: 0–2 queued
+                      </span>
+                      <span>
+                        <i className="queue-dot queue-building" />
+                        Building: 3–5
+                      </span>
+                      <span>
+                        <i className="queue-dot queue-long" />
+                        Long: 6+ or paused
+                      </span>
+                    </div>
+                    <p className="dash-muted">
+                      Schematic grid, not a live street map. Courier positions are not included in your current seed.
+                    </p>
+                  </section>
+
+                  {renderMenu()}
+                </>
+              )}
+              {activeTab === 'Restaurant' && renderMenu()}
+              {activeTab === 'Orders' && renderOrders()}
+              {activeTab === 'Workspace' && (
+                <section className="dash-card">
+                  <h2>Courier orders</h2>
+                  <p>Courier assignments are not implemented yet.</p>
+                </section>
+              )}
+              {activeTab === 'History' && (
+                <section className="dash-card">
+                  <div>
+                    <h2>Order history</h2>
+                    <p className="dash-muted">
+                      Orders visible to your account. Amounts are item subtotals; billing fees and charges are not
+                      implemented yet.
+                    </p>
+                  </div>
+                  {!orders.length ? (
+                    <p className="dash-empty">
+                      {session ? 'No orders to display.' : 'Your history loads automatically after sign-in.'}
+                    </p>
+                  ) : (
+                    <div className="history-table-wrap">
+                      <table className="history-table">
+                        <thead>
+                          <tr>
+                            <th>Order</th>
+                            <th>Restaurant</th>
+                            <th>State</th>
+                            <th>Item subtotal</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {orders.map((o) => (
+                            <tr key={o.id}>
+                              <td>{o.id.slice(0, 8)}</td>
+                              <td>{restaurants.find((r) => r.id === o.restaurantId)?.name || o.restaurantId}</td>
+                              <td>{o.state}</td>
+                              <td>{money(o.total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </section>
               )}
             </section>
-          )}
-        </section>
-      </div>
+          </div>
+        </>
+      )}
       <section className="dash-card console-card">
         <div className="dash-section-title">
           <div>
