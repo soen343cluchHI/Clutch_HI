@@ -1,12 +1,14 @@
+import Logo from './Logo';
+
 export default function AuthLayout({ children }) {
   return (
     <div className="auth-layout">
-      <aside className="auth-brand">
-        <p className="wordmark" translate="no">
-          SugarRush
+      <header className="auth-brand">
+        <Logo size={52} />
+        <p className="brand-tagline">
+          Every order, from the kitchen <span>to the door.</span>
         </p>
-        <p className="brand-tagline">Every order, from the kitchen to the door.</p>
-      </aside>
+      </header>
       <main className="auth-main">{children}</main>
     </div>
   );

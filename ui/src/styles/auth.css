@@ -1,54 +1,72 @@
-/* Layout: brand panel beside the content on desktop, a slim brand bar on mobile. */
+/* Layout */
 .auth-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 5fr) 7fr;
+  align-content: center;
+  justify-items: center;
+  gap: 28px;
   min-height: 100dvh;
+  padding: 48px 16px;
+  background: var(--bg);
 }
 
 .auth-brand {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 40px;
-  background: var(--accent);
-  color: var(--accent-ink);
+  display: grid;
+  justify-items: center;
+  gap: 16px;
+  text-align: center;
 }
 
-.wordmark {
-  font-size: 20px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-mark {
+  flex-shrink: 0;
+  filter: drop-shadow(0 4px 10px color-mix(in srgb, var(--accent) 30%, transparent));
+}
+
+.logo-name {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  color: var(--text);
 }
 
 .brand-tagline {
-  max-width: 14ch;
-  font-size: clamp(32px, 3.6vw, 52px);
-  font-weight: 600;
-  line-height: 1.05;
-  letter-spacing: -0.035em;
+  max-width: 22ch;
+  font-family: 'Fraunces Variable', Georgia, serif;
+  font-style: italic;
+  font-size: clamp(26px, 3vw, 34px);
+  font-weight: 500;
+  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.brand-tagline span {
+  display: block;
+  color: var(--accent);
+  font-weight: 650;
 }
 
 .auth-main {
   display: grid;
-  place-items: center;
-  padding: 48px 24px;
+  justify-items: center;
+  width: 100%;
 }
 
 @media (max-width: 767px) {
   .auth-layout {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-  }
-  .auth-brand {
-    padding: 16px;
-    padding-top: max(16px, env(safe-area-inset-top));
-  }
-  .brand-tagline {
-    display: none;
-  }
-  .auth-main {
-    place-items: start center;
+    align-content: start;
+    gap: 22px;
     padding: 32px 16px;
+    padding-top: max(32px, env(safe-area-inset-top));
+  }
+  .logo-name {
+    font-size: 26px;
   }
 }
 
@@ -57,7 +75,18 @@
   display: grid;
   gap: 24px;
   width: 100%;
-  max-width: 420px;
+  max-width: 440px;
+  padding: 40px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+}
+
+@media (max-width: 767px) {
+  .panel {
+    padding: 28px 22px;
+  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -114,7 +143,7 @@
   width: 100%;
   height: 44px;
   padding: 0 14px;
-  background: var(--surface);
+  background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   transition:
