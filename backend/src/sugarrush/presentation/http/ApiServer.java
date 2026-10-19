@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.time.temporal.TemporalAccessor;
 import java.util.*;
 import sugarrush.application.SugarRush;
+import sugarrush.application.auth.FirebaseRegistrationService.Enrollment;
 import sugarrush.application.commands.*;
 import sugarrush.domain.restaurant.Restaurant;
 import sugarrush.domain.restaurant.MenuItem;
@@ -57,7 +58,12 @@ public final class ApiServer {
         }
 
         String projectId = settings.getProperty("firebase.projectId", "soen343-f701c").trim();
-        ApiServer api = new ApiServer(SugarRush.fromSeed(seed), new FirebaseTokenVerifier(projectId), databaseUrl());
+        SugarRush application = SugarRush.fromSeed(seed);
+        if (!"true".equalsIgnoreCase(System.getenv("SUGARRUSH_REMOTE_RESTAURANTS"))) {
+            Path data = Path.of(System.getenv().getOrDefault("SUGARRUSH_DATA_DIR", "backend/data"));
+            application.useRegistrationStore(data.resolve("firebase-accounts.properties"), data.resolve(seed.getFileName().toString().equals("live.properties") ? "restaurants.properties" : "registered-restaurants.properties"));
+        }
+        ApiServer api = new ApiServer(application, new FirebaseTokenVerifier(projectId), databaseUrl());
         HttpServer server = api.start(port);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop(0)));
         System.out.println("SugarRush backend: http://localhost:" + port);
@@ -107,7 +113,7 @@ public final class ApiServer {
                 send(exchange, 200, Map.of("status", "UP", "service", "SugarRush backend"));
                 return;
             }
-            if (!path.equals("/api/firebase-session") && !path.equals("/api/command")) {
+            if (!path.equals("/api/firebase-session") && !path.equals("/api/command") && !path.equals("/api/register-account")) {
                 send(exchange, 404, Map.of("error", "Endpoint not found"));
                 return;
             }
@@ -133,12 +139,34 @@ public final class ApiServer {
                 if (authorization == null || !authorization.startsWith("Bearer ")) {
                     throw new SecurityException("Sign in required");
                 }
-                identity = verifier.verify(authorization.substring(7));
+                identity = path.equals("/api/register-account")
+                        ? verifier.verifyRegistration(authorization.substring(7))
+                        : verifier.verify(authorization.substring(7));
             } catch (SecurityException failure) {
                 send(exchange, 401, Map.of("error", message(failure)));
                 return;
             }
-            if (remoteRestaurants) loadRestaurants(authorization.substring(7));
+            String firebaseToken = authorization.substring(7);
+            if (path.equals("/api/register-account") && application.hasConfiguredFirebaseAccount(identity.uid())) {
+                // Profile recovery must not overwrite an existing bootstrap/demo identity.
+                Session approved = application.firebaseSession(identity.uid(), identity.email());
+                send(exchange, 200, approved.user());
+                return;
+            }
+            if (remoteRestaurants) {
+                loadRestaurants(firebaseToken);
+                Enrollment stored = remoteEnrollment(identity.uid(), firebaseToken, null);
+                if (stored != null) provisionRemoteAccount(identity.uid(), identity.email(), firebaseToken, stored);
+            }
+            if (path.equals("/api/register-account")) {
+                Enrollment enrollment = new Enrollment(Role.valueOf(required(fields, "role")), fields.get("restaurantName"));
+                if (remoteRestaurants) enrollment = remoteEnrollment(identity.uid(), firebaseToken, enrollment);
+                var user = remoteRestaurants
+                        ? provisionRemoteAccount(identity.uid(), identity.email(), firebaseToken, enrollment)
+                        : application.registerFirebaseAccount(identity.uid(), identity.email(), enrollment.role(), enrollment.restaurantName());
+                send(exchange, 200, user);
+                return;
+            }
             Session session = application.firebaseSession(identity.uid(), identity.email());
             String token = session.token();
             if (path.equals("/api/firebase-session")) {
@@ -193,6 +221,80 @@ public final class ApiServer {
         }
     }
 
+    private sugarrush.domain.user.User provisionRemoteAccount(String uid, String email, String token, Enrollment enrollment) {
+        if (enrollment.role() != Role.RESTAURANT)
+            return application.registerFirebaseAccount(uid, email, enrollment.role(), enrollment.restaurantName());
+        String id = UUID.nameUUIDFromBytes(("signup:firebase:" + uid).getBytes(StandardCharsets.UTF_8)).toString();
+        try {
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(restaurantUrl(id, token)))
+                    .timeout(java.time.Duration.ofSeconds(10)).GET().build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) throw new IllegalStateException("Could not load registered restaurant");
+            boolean exists = !response.body().trim().equals("null");
+            if (exists) {
+                var data = Json.object(response.body());
+                if (!("firebase:" + uid).equals(data.get("ownerId"))) throw new SecurityException("Restaurant ownership mismatch");
+                try { application.restaurantView(id); }
+                catch (NoSuchElementException missing) {
+                    application.importRestaurant(decodeRestaurant(id, data));
+                }
+            }
+            var user = application.registerFirebaseAccount(uid, email, enrollment.role(), enrollment.restaurantName());
+            if (!exists) saveRestaurant(id, token);
+            return user;
+        } catch (IOException failure) { throw new IllegalStateException("Could not provision restaurant", failure); }
+        catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Restaurant provisioning interrupted", failure);
+        }
+    }
+
+    private static Restaurant decodeRestaurant(String id, Map<?, ?> data) {
+        Restaurant restaurant = new Restaurant(id, String.valueOf(data.get("ownerId")), String.valueOf(data.get("name")),
+                ((Number) data.get("x")).doubleValue(), ((Number) data.get("y")).doubleValue(),
+                Restaurant.Status.valueOf(String.valueOf(data.get("status"))));
+        if (data.get("menu") instanceof List<?> menu) for (Object raw : menu) {
+            if (!(raw instanceof Map<?, ?> item)) continue;
+            restaurant.putItem(new MenuItem(String.valueOf(item.get("id")), String.valueOf(item.get("name")),
+                    new BigDecimal(String.valueOf(item.get("price"))), MenuItem.Status.valueOf(String.valueOf(item.get("status")))));
+        }
+        return restaurant;
+    }
+
+    private Enrollment remoteEnrollment(String uid, String token, Enrollment requested) {
+        if (databaseUrl == null || databaseUrl.isBlank()) throw new IllegalStateException("Database URL required");
+        String url = databaseUrl.replaceAll("/+$", "") + "/accountRegistrations/"
+                + java.net.URLEncoder.encode(uid, StandardCharsets.UTF_8) + ".json?auth="
+                + java.net.URLEncoder.encode(token, StandardCharsets.UTF_8);
+        try {
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(url))
+                    .timeout(java.time.Duration.ofSeconds(10)).header("X-Firebase-ETag", "true").GET().build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) throw new IllegalStateException("Could not load account registration; check deployed database rules");
+            if (!response.body().trim().equals("null")) {
+                var data = Json.object(response.body());
+                Enrollment existing = new Enrollment(Role.valueOf(String.valueOf(data.get("role"))), String.valueOf(data.getOrDefault("restaurantName", "")));
+                if (requested != null && !requested.equals(existing)) throw new IllegalStateException("This account is already registered with different details");
+                return existing;
+            }
+            if (requested == null) return null;
+            String body = json(Map.of("role", requested.role(), "restaurantName", requested.restaurantName()));
+            HttpResponse<String> saved = http.send(HttpRequest.newBuilder(URI.create(url))
+                    .timeout(java.time.Duration.ofSeconds(10)).header("Content-Type", "application/json")
+                    .header("if-match", response.headers().firstValue("etag").orElseThrow())
+                    .PUT(HttpRequest.BodyPublishers.ofString(body)).build(), HttpResponse.BodyHandlers.ofString());
+            if (saved.statusCode() == 412) {
+                Enrollment existing = remoteEnrollment(uid, token, null);
+                if (requested.equals(existing)) return existing;
+                throw new IllegalStateException("This account is already registered with different details");
+            }
+            if (saved.statusCode() != 200) throw new IllegalStateException("Could not save account registration; check deployed database rules");
+            return requested;
+        } catch (IOException failure) { throw new IllegalStateException("Account registration service unavailable", failure); }
+        catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Account registration interrupted", failure);
+        }
+    }
+
     private String restaurantUrl(String id, String token) {
         return databaseUrl.replaceAll("/+$", "") + "/restaurants" + (id == null ? "" : "/" + id)
                 + ".json?auth=" + java.net.URLEncoder.encode(token, StandardCharsets.UTF_8);
@@ -208,15 +310,7 @@ public final class ApiServer {
             if (!response.body().trim().equals("null")) {
                 for (var entry : Json.object(response.body()).entrySet()) {
                     if (!(entry.getValue() instanceof Map<?, ?> data)) continue;
-                    Restaurant restaurant = new Restaurant(entry.getKey(), String.valueOf(data.get("ownerId")),
-                            String.valueOf(data.get("name")), ((Number) data.get("x")).doubleValue(),
-                            ((Number) data.get("y")).doubleValue(), Restaurant.Status.valueOf(String.valueOf(data.get("status"))));
-                    if (data.get("menu") instanceof List<?> menu) for (Object raw : menu) {
-                        if (!(raw instanceof Map<?, ?> item)) continue;
-                        restaurant.putItem(new MenuItem(String.valueOf(item.get("id")), String.valueOf(item.get("name")),
-                                new BigDecimal(String.valueOf(item.get("price"))),
-                                MenuItem.Status.valueOf(String.valueOf(item.get("status")))));
-                    }
+                    Restaurant restaurant = decodeRestaurant(entry.getKey(), data);
                     application.importRestaurant(restaurant);
                 }
             }
@@ -243,26 +337,6 @@ public final class ApiServer {
             throw new IllegalStateException("Could not save restaurant to Firebase", failure);
         }
     }
-
-    private Role profileRole(String uid, String email, String token) {
-        if (databaseUrl == null || databaseUrl.isBlank()) return Role.CUSTOMER;
-        try {
-            String url = databaseUrl.replaceAll("/+$", "") + "/users/" + uid + ".json?auth=" +
-                    java.net.URLEncoder.encode(token, StandardCharsets.UTF_8);
-            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(url)).GET().build(),
-                    HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) throw new IllegalStateException("Could not verify account role");
-            Map<String, Object> profile = Json.object(response.body());
-            if (!email.equals(profile.get("email"))) throw new SecurityException("Account profile mismatch");
-            return Role.valueOf(String.valueOf(profile.get("role")).toUpperCase(Locale.ROOT));
-        } catch (InterruptedException failure) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Could not verify account role");
-        } catch (IOException failure) {
-            throw new IllegalStateException("Could not verify account role");
-        }
-    }
-
 
     private static String message(Exception failure) {
         return failure.getMessage() == null ? "Command failed" : failure.getMessage();

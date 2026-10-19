@@ -26,6 +26,29 @@ public final class SugarRush {
             dashboard, log);
     private final Map<String, User> firebaseAccounts = new HashMap<>();
     private final Map<String, Session> firebaseSessions = new HashMap<>();
+    private final FirebaseRegistrationService firebaseRegistrations = new FirebaseRegistrationService();
+
+    public synchronized void useRegistrationStore(Path accounts, Path restaurantStore) throws IOException {
+        firebaseRegistrations.useStore(accounts);
+        restaurants.useStore(restaurantStore);
+    }
+
+    public synchronized boolean hasConfiguredFirebaseAccount(String uid) {
+        return firebaseAccounts.containsKey(uid);
+    }
+
+    public synchronized User registerFirebaseAccount(String uid, String email, Role role, String restaurantName) {
+        if (firebaseAccounts.containsKey(uid)) throw new IllegalStateException("This account already has a configured backend identity");
+        var enrollment = new FirebaseRegistrationService.Enrollment(role, restaurantName);
+        firebaseRegistrations.register(uid, enrollment);
+        User user = new User("firebase:" + uid, email, enrollment.role());
+        if (role == Role.RESTAURANT) restaurants.provision(user, enrollment.restaurantName());
+        Session previous = firebaseSessions.remove(uid);
+        if (previous != null) {
+            try { authentication.logout(previous.token()); } catch (SecurityException ignored) { }
+        }
+        return user;
+    }
 
     private SugarRush() {
         publisher.subscribe(events);
@@ -67,7 +90,7 @@ public final class SugarRush {
         return authentication.login(username, password);
     }
 
-    // Profile roles cannot grant privileges; only configured UID mappings can.
+    // Roles come from configured legacy mappings or explicit persisted enrollment, never profile labels.
     public synchronized Session firebaseSession(String uid, String email, Role selectedRole) {
         if (uid == null || uid.isBlank())
             throw new SecurityException("Verified Firebase UID required");
@@ -76,7 +99,9 @@ public final class SugarRush {
             try {
                 User existing = authentication.verify(current.token());
                 User approvedAccount = firebaseAccounts.get(uid);
-                Role expectedRole = approvedAccount == null ? Role.CUSTOMER : approvedAccount.role();
+                var enrollment = firebaseRegistrations.find(uid);
+                Role expectedRole = approvedAccount != null ? approvedAccount.role()
+                        : enrollment == null ? Role.CUSTOMER : enrollment.role();
                 if (existing.role() == expectedRole) return current;
                 authentication.logout(current.token());
                 firebaseSessions.remove(uid);
@@ -85,8 +110,11 @@ public final class SugarRush {
             }
         }
         User approved = firebaseAccounts.get(uid);
-        User user = approved == null ? new User("firebase:" + uid, email, Role.CUSTOMER)
+        var enrollment = firebaseRegistrations.find(uid);
+        User user = approved == null ? new User("firebase:" + uid, email, enrollment == null ? Role.CUSTOMER : enrollment.role())
                 : new User(approved.id(), email, approved.role());
+        if (approved == null && enrollment != null && enrollment.role() == Role.RESTAURANT)
+            restaurants.provision(user, enrollment.restaurantName());
         Session session = authentication.openSession(user);
         firebaseSessions.put(uid, session);
         return session;
@@ -101,7 +129,7 @@ public final class SugarRush {
     }
 
     public synchronized void importRestaurant(sugarrush.domain.restaurant.Restaurant restaurant) {
-        restaurants.add(restaurant);
+        restaurants.importIfAbsent(restaurant);
     }
 
     public synchronized RestaurantService.View restaurantView(String id) {

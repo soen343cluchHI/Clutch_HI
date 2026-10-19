@@ -21,7 +21,7 @@ public final class RestaurantService {
         Properties p = new Properties();
         try (Reader reader = Files.newBufferedReader(path)) { p.load(reader); }
         for (String id : p.getProperty("restaurants", "").split(",")) {
-            if (id.isBlank()) continue;
+            if (id.isBlank() || restaurants.containsKey(id)) continue;
             String prefix = "restaurant." + id + ".";
             Restaurant restaurant = new Restaurant(id, p.getProperty(prefix + "owner"), p.getProperty(prefix + "name"),
                     Double.parseDouble(p.getProperty(prefix + "x")), Double.parseDouble(p.getProperty(prefix + "y")),
@@ -76,6 +76,20 @@ public final class RestaurantService {
         return browse(owner).stream().filter(view -> view.id().equals(id)).findFirst().orElseThrow();
     }
 
+    public View provision(User owner, String name) {
+        if (owner.role() != Role.RESTAURANT) throw new SecurityException("Restaurant account required");
+        if (name == null || name.isBlank() || name.trim().length() > 80)
+            throw new IllegalArgumentException("Enter a restaurant name (up to 80 characters)");
+        String id = UUID.nameUUIDFromBytes(("signup:" + owner.id()).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+        if (!restaurants.containsKey(id)) {
+            int hash = Math.abs(id.hashCode() % 10000);
+            add(new Restaurant(id, owner.id(), name.trim(), 8 + hash % 80, 8 + hash / 100 % 80, Restaurant.Status.OPEN));
+        }
+        if (!require(id).ownerId().equals(owner.id())) throw new SecurityException("Restaurant ownership mismatch");
+        save();
+        return browse(owner).stream().filter(view -> view.id().equals(id)).findFirst().orElseThrow();
+    }
+
     public void changeStatus(String id, Restaurant.Status status) {
         require(id).changeStatus(status);
         save();
@@ -94,6 +108,11 @@ public final class RestaurantService {
     public void add(Restaurant restaurant) {
         if (restaurants.putIfAbsent(restaurant.id(), restaurant) != null)
             throw new IllegalArgumentException("Duplicate restaurant");
+    }
+
+    public void importIfAbsent(Restaurant restaurant) {
+        // Demo fixtures can also exist in the remote store; keep the current seed owner.
+        restaurants.putIfAbsent(restaurant.id(), restaurant);
     }
 
     public Restaurant require(String id) {
