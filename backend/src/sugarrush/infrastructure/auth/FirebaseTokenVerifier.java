@@ -45,6 +45,15 @@ public final class FirebaseTokenVerifier {
     }
 
     public Identity verify(String token) {
+        return verify(token, true);
+    }
+
+    // Registration may persist setup before email verification; operational routes may not.
+    public Identity verifyRegistration(String token) {
+        return verify(token, false);
+    }
+
+    private Identity verify(String token, boolean requireVerifiedEmail) {
         if (token == null || token.length() > 16384)
             throw invalid();
         try {
@@ -84,7 +93,7 @@ public final class FirebaseTokenVerifier {
             if (claims.containsKey("user_id") && !uid.equals(claims.get("user_id")))
                 throw invalid();
 
-            if (!Boolean.TRUE.equals(claims.get("email_verified")))
+            if (requireVerifiedEmail && !Boolean.TRUE.equals(claims.get("email_verified")))
                 throw new SecurityException("Verify your email before using SugarRush.");
 
             String email = claims.get("email") instanceof String text && !text.isBlank() ? text : uid;

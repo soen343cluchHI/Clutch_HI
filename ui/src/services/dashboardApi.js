@@ -31,3 +31,11 @@ export async function connect(firebaseUser) {
 export function command(current, action, fields = {}) {
   return post(current.firebaseUser, '/api/command', { action, ...fields });
 }
+
+// The backend binds enrollment to the signed token's UID, never a supplied UID.
+export function registerAccount(firebaseUser, requestedRole, restaurantName = '') {
+  return post(firebaseUser, '/api/register-account', {
+    role: requestedRole.toUpperCase(),
+    restaurantName: requestedRole === 'Restaurant' ? restaurantName.trim() : '',
+  });
+}

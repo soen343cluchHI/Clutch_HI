@@ -151,6 +151,7 @@
     box-shadow 0.15s;
 }
 
+
 .field-control input:hover {
   border-color: var(--border-strong);
 }
@@ -184,6 +185,18 @@
 }
 
 /* Role picker */
+.operator-code-disabled {
+  cursor: not-allowed;
+}
+.operator-code-disabled fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .role-picker {
   display: grid;
   gap: 8px;
@@ -199,6 +212,10 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+
+.signup-role-grid .role-option:first-child {
+  grid-column: 1 / -1;
 }
 
 .role-option {

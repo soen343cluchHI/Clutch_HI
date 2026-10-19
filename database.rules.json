@@ -7,10 +7,24 @@
         ".read": "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists()) || (data.exists() && !newData.exists()))",
         ".validate": "newData.hasChildren(['email', 'role', 'createdAt'])",
-        "email": { ".validate": "newData.isString() && newData.val() === auth.token.email" },
-        "role": { ".validate": "newData.val() === 'Customer'" },
-        "createdAt": { ".validate": "newData.isNumber() && newData.val() === now" },
-        "$other": { ".validate": false }
+        "email": {
+          ".validate": "newData.isString() && newData.val() === auth.token.email"
+        },
+        "role": {
+          ".validate": "newData.val() === 'Customer'"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber() && newData.val() === now"
+        },
+        "$other": {
+          ".validate": false
+        },
+        "requestedRole": {
+          ".validate": "newData.val() === 'Customer' || newData.val() === 'Restaurant' || newData.val() === 'Courier'"
+        },
+        "restaurantName": {
+          ".validate": "newData.isString() && ((newData.parent().child('requestedRole').val() === 'Restaurant' && newData.val().length > 0 && newData.val().length <= 80) || (newData.parent().child('requestedRole').val() !== 'Restaurant' && newData.val() === ''))"
+        }
       }
     },
     "profiles": {
@@ -28,12 +42,36 @@
     "restaurants": {
       ".read": "auth != null",
       "$id": {
-        ".write": "auth != null && root.child('users').child(auth.uid).child('role').val() === 'Restaurant' && newData.child('ownerId').val() === 'firebase:' + auth.uid && (!data.exists() || data.child('ownerId').val() === newData.child('ownerId').val())",
+        ".write": "auth != null && (root.child('accountRegistrations').child(auth.uid).child('role').val() === 'RESTAURANT' || root.child('users').child(auth.uid).child('role').val() === 'Restaurant') && newData.child('ownerId').val() === 'firebase:' + auth.uid && (!data.exists() || data.child('ownerId').val() === newData.child('ownerId').val())",
         ".validate": "newData.hasChildren(['ownerId', 'name', 'x', 'y', 'status'])",
-        "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80" },
-        "x": { ".validate": "newData.isNumber()" },
-        "y": { ".validate": "newData.isNumber()" },
-        "status": { ".validate": "newData.val() === 'OPEN' || newData.val() === 'PAUSED' || newData.val() === 'CLOSED'" }
+        "name": {
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80"
+        },
+        "x": {
+          ".validate": "newData.isNumber()"
+        },
+        "y": {
+          ".validate": "newData.isNumber()"
+        },
+        "status": {
+          ".validate": "newData.val() === 'OPEN' || newData.val() === 'PAUSED' || newData.val() === 'CLOSED'"
+        }
+      }
+    },
+    "accountRegistrations": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.exists()",
+        ".validate": "newData.hasChildren(['role', 'restaurantName'])",
+        "role": {
+          ".validate": "newData.val() === 'CUSTOMER' || newData.val() === 'RESTAURANT' || newData.val() === 'COURIER'"
+        },
+        "restaurantName": {
+          ".validate": "newData.isString() && ((newData.parent().child('role').val() === 'RESTAURANT' && newData.val().length > 0 && newData.val().length <= 80) || (newData.parent().child('role').val() !== 'RESTAURANT' && newData.val() === ''))"
+        },
+        "$other": {
+          ".validate": false
+        }
       }
     }
   }
