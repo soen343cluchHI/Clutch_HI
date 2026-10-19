@@ -192,6 +192,17 @@ public final class FirebaseLoginChecks {
                     "Duplicate event ID");
             check(events.stream().filter(e -> "Cancelled".equals(((Map<?, ?>) e).get("newState"))).count() == 3,
                     "Cancellation events missing");
+            Response profile = command(base, customer, "UPDATE_PROFILE",
+                    Map.of("profile.displayName", "Ada", "profile.deliveryAddress", "1455 De Maisonneuve"));
+            check(profile.status == 200, "Customer cannot update profile");
+            check(((Map<?, ?>) command(base, customer, "VIEW_PROFILE", Map.of()).object().get("profile"))
+                    .get("deliveryAddress").equals("1455 De Maisonneuve"), "Profile not returned over HTTP");
+            check(((Map<?, ?>) command(base, second, "VIEW_PROFILE", Map.of()).object().get("profile"))
+                    .get("displayName").equals(""), "Profile leaked to another customer");
+            check(command(base, staff, "UPDATE_PROFILE", Map.of("profile.deliveryAddress", "Kitchen")).status == 403,
+                    "Staff edited a customer-only field");
+            check(command(base, second, "UPDATE_PROFILE", Map.of("profile.phone", "not a phone")).status == 400,
+                    "Invalid phone accepted");
             check(command(base, customer, "LOGOUT", Map.of()).status == 200, "Internal logout failed");
             check(command(base, renewed, "LIST_ORDERS", Map.of()).array().size() == 1,
                     "Firebase re-login lost order ownership");
