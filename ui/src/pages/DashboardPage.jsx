@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import CustomerView from '../components/CustomerView';
 import Logo from '../components/Logo';
+import ProfilePanel from '../components/ProfilePanel';
 import SimulatorMap, { queueBand } from '../components/SimulatorMap';
 import * as api from '../services/dashboardApi';
 import { canExecute, loadWorkspace, workspaceActions } from '../services/dashboardWorkspace';
@@ -18,8 +19,9 @@ const money = (value) =>
     currency: 'CAD',
   }).format(value);
 
-export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteAccount, busy: authBusy, error: authError }) {
+export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount, busy: authBusy, error: authError }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState('');
   const [tab, setTab] = useState(null);
@@ -439,7 +441,7 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
       </header>
       {settingsOpen && <section className="dash-card account-settings" aria-label="Account settings">
         <div className="dash-section-title"><h2>Account settings</h2><button className="btn-link" type="button" onClick={() => { setSettingsOpen(false); setConfirmDelete(false); }}>Close</button></div>
-        <p className="dash-muted">{email}</p>
+        <button className="btn btn-primary" disabled={!session} onClick={() => setProfileOpen(true)}>Manage my profile</button>
         <button className="btn btn-secondary" disabled={disabled} onClick={signOut}>Sign out</button>
         {!confirmDelete ? <button className="btn btn-danger-outline" disabled={disabled} onClick={() => setConfirmDelete(true)}>Delete account</button> : <div className="delete-confirmation">
           <p>Delete your account permanently? You will lose access to this profile.</p>
@@ -448,6 +450,7 @@ export default function DashboardPage({ firebaseUser, email, onLogout, onDeleteA
           <button className="btn btn-secondary" disabled={disabled} onClick={() => { setConfirmDelete(false); setDeletePassword(''); }}>Cancel</button>
         </div>}
       </section>}
+      {profileOpen && <ProfilePanel session={session} send={send} disabled={disabled} onClose={() => setProfileOpen(false)} />}
       {(error || authError) && (
         <p className="form-alert" role="alert">
           {error || authError}

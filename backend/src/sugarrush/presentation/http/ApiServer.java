@@ -20,8 +20,10 @@ import java.util.*;
 import sugarrush.application.SugarRush;
 import sugarrush.application.auth.FirebaseRegistrationService.Enrollment;
 import sugarrush.application.commands.*;
+import sugarrush.application.profile.ProfileService;
 import sugarrush.domain.restaurant.Restaurant;
 import sugarrush.domain.restaurant.MenuItem;
+import sugarrush.domain.user.Profile;
 import sugarrush.domain.user.Session;
 import sugarrush.domain.user.Role;
 import sugarrush.infrastructure.auth.FirebaseTokenVerifier;
@@ -35,6 +37,7 @@ public final class ApiServer {
     private final String databaseUrl;
     private final boolean remoteRestaurants = "true".equalsIgnoreCase(System.getenv("SUGARRUSH_REMOTE_RESTAURANTS"));
     private boolean restaurantsLoaded;
+    private final Set<String> profilesLoaded = new HashSet<>();
 
     ApiServer(SugarRush application, FirebaseTokenVerifier verifier) {
         this(application, verifier, null);
@@ -175,11 +178,17 @@ public final class ApiServer {
             }
             Action action = Action.valueOf(required(fields, "action"));
             Map<String, Integer> items = new LinkedHashMap<>();
+            Map<String, String> profile = new LinkedHashMap<>();
             for (var entry : fields.entrySet()) {
                 if (entry.getKey().startsWith("item.")) {
                     items.put(entry.getKey().substring(5), Integer.valueOf(entry.getValue()));
                 }
+                if (entry.getKey().startsWith("profile.")) {
+                    profile.put(entry.getKey().substring(8), entry.getValue());
+                }
             }
+            if (remoteRestaurants && (action == Action.VIEW_PROFILE || action == Action.UPDATE_PROFILE))
+                loadProfile(identity.uid(), session.user().id(), authorization.substring(7));
             Command command = switch (action) {
             case CREATE_RESTAURANT -> new Command(token, action, null, null, null, required(fields, "name"), null, null);
             case PUT_MENU_ITEM -> new Command(token, action, required(fields, "restaurantId"), null, null, null, null,
@@ -194,7 +203,9 @@ public final class ApiServer {
             case PLACE_ORDER -> Command.place(token, required(fields, "restaurantId"), items);
             case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY ->
                 Command.order(token, action, required(fields, "orderId"), fields.get("reason"));
-            case BROWSE_RESTAURANTS, LIST_ORDERS, SESSION_INFO, ROLE_MENU, LOGOUT, DASHBOARD, EVENT_LOG, COMMAND_LOG ->
+            case UPDATE_PROFILE -> Command.profile(token, profile);
+            case BROWSE_RESTAURANTS, LIST_ORDERS, SESSION_INFO, ROLE_MENU, LOGOUT, DASHBOARD, EVENT_LOG, COMMAND_LOG,
+                    VIEW_PROFILE ->
                 new Command(token, action);
             default -> throw new IllegalArgumentException("This endpoint does not support that command yet");
             };
@@ -207,6 +218,8 @@ public final class ApiServer {
                         ? ((sugarrush.application.restaurant.RestaurantService.View) result).id() : command.restaurantId();
                 saveRestaurant(restaurantId, authorization.substring(7));
             }
+            if (remoteRestaurants && action == Action.UPDATE_PROFILE)
+                saveProfile(identity.uid(), ((ProfileService.View) result).profile(), authorization.substring(7));
             send(exchange, 200, result);
         } catch (FirebaseTokenVerifier.UnavailableException failure) {
             send(exchange, 503, Map.of("error", message(failure)));
@@ -336,6 +349,54 @@ public final class ApiServer {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Could not save restaurant to Firebase", failure);
         }
+    }
+
+    private String profileUrl(String uid, String token) {
+        return databaseUrl.replaceAll("/+$", "") + "/profiles/" + uid + ".json?auth="
+                + java.net.URLEncoder.encode(token, StandardCharsets.UTF_8);
+    }
+
+    private synchronized void loadProfile(String uid, String userId, String token) {
+        if (!profilesLoaded.add(uid)) return;
+        try {
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(profileUrl(uid, token)))
+                    .GET().build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) throw new IllegalStateException("Could not load profile from Firebase");
+            if (!response.body().trim().equals("null")) {
+                Map<String, Object> data = Json.object(response.body());
+                application.importProfile(userId, new Profile(text(data, "displayName"), text(data, "phone"),
+                        text(data, "deliveryAddress"), text(data, "vehicle")));
+            }
+        } catch (IOException failure) {
+            profilesLoaded.remove(uid);
+            throw new IllegalStateException("Could not load profile from Firebase", failure);
+        } catch (InterruptedException failure) {
+            profilesLoaded.remove(uid);
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Could not load profile from Firebase", failure);
+        } catch (RuntimeException failure) {
+            profilesLoaded.remove(uid);
+            throw failure;
+        }
+    }
+
+    private void saveProfile(String uid, Profile profile, String token) {
+        try {
+            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(profileUrl(uid, token)))
+                    .header("Content-Type", "application/json")
+                    .PUT(HttpRequest.BodyPublishers.ofString(json(profile.values())))
+                    .build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) throw new IllegalStateException("Could not save profile to Firebase: " + response.statusCode());
+        } catch (IOException failure) {
+            throw new IllegalStateException("Could not save profile to Firebase", failure);
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Could not save profile to Firebase", failure);
+        }
+    }
+
+    private static String text(Map<String, Object> data, String key) {
+        return data.get(key) instanceof String value ? value : "";
     }
 
     private static String message(Exception failure) {

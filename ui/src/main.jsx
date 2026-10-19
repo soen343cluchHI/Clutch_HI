@@ -356,7 +356,6 @@ function App() {
       <DashboardPage
         key={user.uid}
         firebaseUser={user}
-        email={user.email}
         busy={busy}
         error={error}
         onLogout={logout}
