@@ -24,7 +24,6 @@ function App() {
   const [resetSent, setResetSent] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('Customer');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [profileError, setProfileError] = useState('');
@@ -62,7 +61,7 @@ function App() {
   async function saveProfile(current) {
     await set(ref(database, `users/${current.uid}`), {
       email: current.email,
-      role,
+      role: 'Customer',
       createdAt: serverTimestamp(),
     });
   }
@@ -172,8 +171,6 @@ function App() {
           registering={registering}
           resettingPassword={resettingPassword}
           resetSent={resetSent}
-          role={role}
-          setRole={setRole}
           email={email}
           setEmail={setEmail}
           password={password}
@@ -222,7 +219,7 @@ function App() {
           onLogout={logout}
         />
       );
-    if (!profile) return <ProfileSetupPage busy={busy} error={error} onSubmit={submit} onLogout={logout} role={role} setRole={setRole} />;
+    if (!profile) return <ProfileSetupPage busy={busy} error={error} onSubmit={submit} onLogout={logout} />;
     return (
       <DashboardPage
         key={user.uid}

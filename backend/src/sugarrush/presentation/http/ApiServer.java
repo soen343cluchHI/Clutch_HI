@@ -138,7 +138,7 @@ public final class ApiServer {
                 return;
             }
             if (remoteRestaurants) loadRestaurants(authorization.substring(7));
-            Session session = application.firebaseSession(identity.uid(), identity.email(), profileRole(identity.uid(), identity.email(), authorization.substring(7)));
+            Session session = application.firebaseSession(identity.uid(), identity.email());
             String token = session.token();
             if (path.equals("/api/firebase-session")) {
                 send(exchange, 200, application.execute(new Command(token, Action.SESSION_INFO)));
