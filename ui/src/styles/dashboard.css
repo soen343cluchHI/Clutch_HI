@@ -595,7 +595,7 @@
 }
 .profile-button { width: 44px; height: 44px; display: grid; place-items: center; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 50%; cursor: pointer; }
 .profile-button:hover, .profile-button:focus-visible { border-color: var(--accent); }
-.account-settings { justify-self: end; width: min(100%, 360px); }
+.account-settings { justify-self: end; width: min(100%, 420px); }
 .account-settings .dash-section-title { margin: 0; }
 .delete-confirmation { display: grid; gap: 10px; }
 .btn-danger-outline { color: var(--danger); background: var(--surface); border: 1px solid var(--danger); }
@@ -604,3 +604,15 @@
 .menu-editor { border-top: 1px solid var(--border); padding-top: 18px; }
 .menu-owner-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .menu-owner-actions .btn { height: 36px; padding: 0 10px; font-size: 12px; }
+.profile-view, .profile-form { display: grid; gap: 14px; }
+.profile-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-view .btn-primary { justify-self: start; }
+.profile-empty { color: var(--text-muted); font-weight: 400; font-style: italic; }
+.profile-dialog { width: min(calc(100vw - 32px), 460px); max-height: calc(100dvh - 32px); padding: 28px; overflow-y: auto; color: var(--text); background: var(--surface); border: 0; border-radius: 24px; box-shadow: 0 24px 60px rgb(30 15 12 / 0.25); }
+.profile-dialog::backdrop { background: rgb(30 15 12 / 0.45); backdrop-filter: blur(4px); }
+.profile-dialog .dash-section-title { margin: 0 0 18px; }
+.profile-dialog h2 { margin: 0; font-size: 22px; }
+@media (prefers-reduced-motion: no-preference) {
+  .profile-dialog[open] { animation: dialog-in 0.25s var(--ease); }
+  @keyframes dialog-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+}

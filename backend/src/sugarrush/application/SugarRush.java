@@ -9,6 +9,7 @@ import sugarrush.application.auth.*;
 import sugarrush.application.commands.*;
 import sugarrush.application.events.*;
 import sugarrush.application.order.OrderService;
+import sugarrush.application.profile.ProfileService;
 import sugarrush.application.restaurant.RestaurantService;
 import sugarrush.application.seed.SeedLoader;
 import sugarrush.domain.user.*;
@@ -22,8 +23,9 @@ public final class SugarRush {
     private final OrderEventPublisher publisher = new OrderEventPublisher();
     private final CommandLog log = new CommandLog();
     private final OrderService orders = new OrderService(restaurants, publisher);
-    private final CommandProcessor commands = new CommandProcessor(authentication, restaurants, orders, events,
-            dashboard, log);
+    private final ProfileService profiles = new ProfileService();
+    private final CommandProcessor commands = new CommandProcessor(authentication, restaurants, orders, profiles,
+            events, dashboard, log);
     private final Map<String, User> firebaseAccounts = new HashMap<>();
     private final Map<String, Session> firebaseSessions = new HashMap<>();
 
@@ -36,8 +38,10 @@ public final class SugarRush {
         SugarRush app = new SugarRush();
         new SeedLoader().load(path, app.registration, app.restaurants);
         if (path.getFileName().toString().equals("live.properties")
-                && !"true".equalsIgnoreCase(System.getenv("SUGARRUSH_REMOTE_RESTAURANTS")))
+                && !"true".equalsIgnoreCase(System.getenv("SUGARRUSH_REMOTE_RESTAURANTS"))) {
             app.restaurants.useStore(Path.of("backend/data/restaurants.properties"));
+            app.profiles.useStore(Path.of("backend/data/profiles.properties"));
+        }
         Properties properties = new Properties();
         try (Reader reader = Files.newBufferedReader(path)) {
             properties.load(reader);
@@ -102,6 +106,10 @@ public final class SugarRush {
 
     public synchronized void importRestaurant(sugarrush.domain.restaurant.Restaurant restaurant) {
         restaurants.add(restaurant);
+    }
+
+    public synchronized void importProfile(String userId, Profile profile) {
+        profiles.put(userId, profile);
     }
 
     public synchronized RestaurantService.View restaurantView(String id) {

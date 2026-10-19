@@ -18,6 +18,8 @@ const supportedActions = new Set([
   'DASHBOARD',
   'EVENT_LOG',
   'COMMAND_LOG',
+  'VIEW_PROFILE',
+  'UPDATE_PROFILE',
 ]);
 
 export function workspaceActions(menu) {
