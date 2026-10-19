@@ -4,8 +4,8 @@ import FormAlert from '../components/FormAlert';
 
 export default function AuthPage({ registering, resettingPassword, resetSent, email, setEmail, password,
   setPassword, busy, error, onSubmit, onResetPassword, onForgotPassword, onBackToSignIn,
-  onToggleMode, signupRole, onSignupRoleChange }) {
-  const [details, setDetails] = useState({ restaurantName: '', operatorCode: '' });
+  onToggleMode, signupRole, onSignupRoleChange, restaurantName, setRestaurantName, authenticatedSignup = false }) {
+  const [details, setDetails] = useState({ operatorCode: '' });
   const specialSignup = registering && !resettingPassword && signupRole !== 'Customer';
   const updateDetail = name => event => setDetails(current => ({ ...current, [name]: event.target.value }));
   return (
@@ -27,14 +27,14 @@ export default function AuthPage({ registering, resettingPassword, resetSent, em
             </label>)}
           </div>
         </fieldset>}
-        <Field label="Email" type="email" name="email" autoComplete="email" spellCheck={false} required value={email} onChange={(e) => setEmail(e.target.value)} />
-        {!resettingPassword && <Field label="Password" type="password" name="password" required
+        <Field label="Email" type="email" name="email" autoComplete="email" spellCheck={false} readOnly={authenticatedSignup} required value={email} onChange={(e) => setEmail(e.target.value)} />
+        {!resettingPassword && !authenticatedSignup && <Field label="Password" type="password" name="password" required
           autoComplete={registering ? 'new-password' : 'current-password'} minLength={registering ? 6 : undefined}
           hint={registering ? 'At least 6 characters.' : undefined}
           value={password} onChange={(e) => setPassword(e.target.value)} />}
         {specialSignup && <>
           {signupRole === 'Restaurant' && <Field label="Restaurant name" name="restaurantName" autoComplete="organization" maxLength={80} required
-            value={details.restaurantName} onChange={updateDetail('restaurantName')} />}
+            value={restaurantName} onChange={event => setRestaurantName(event.target.value)} />}
           <div className="operator-code-disabled" title="Operator approval not implemented yet" tabIndex={0} aria-label="Operator approval not implemented yet">
             <fieldset disabled>
               <Field label="Operator signup code" type="password" name="operatorCode" autoComplete="off" required
@@ -45,7 +45,7 @@ export default function AuthPage({ registering, resettingPassword, resetSent, em
         {!registering && !resettingPassword && <button type="button" className="btn-link forgot-link" disabled={busy} onClick={onForgotPassword}>Forgot password?</button>}
         <FormAlert message={error} />
         {resetSent && <p className="form-success" role="status">If this email has an account, check your inbox for a reset link.</p>}
-        <button className="btn btn-primary" disabled={busy || specialSignup}>
+        <button className="btn btn-primary" disabled={busy}>
           {busy ? 'Please wait…' : resettingPassword ? 'Send reset link' : registering ? 'Create Account' : 'Sign In'}
         </button>
       </form>
