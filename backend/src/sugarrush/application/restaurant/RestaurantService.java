@@ -30,7 +30,8 @@ public final class RestaurantService {
                 if (itemId.isBlank()) continue;
                 String item = prefix + "item." + itemId + ".";
                 restaurant.putItem(new MenuItem(itemId, p.getProperty(item + "name"),
-                        new BigDecimal(p.getProperty(item + "price")), MenuItem.Status.valueOf(p.getProperty(item + "status"))));
+                        new BigDecimal(p.getProperty(item + "price")), MenuItem.Status.valueOf(p.getProperty(item + "status")),
+                        p.getProperty(item + "description", ""), p.getProperty(item + "imageUrl", "")));
             }
             add(restaurant);
         }
@@ -53,6 +54,8 @@ public final class RestaurantService {
                 p.setProperty(item + "name", menuItem.name());
                 p.setProperty(item + "price", menuItem.price().toPlainString());
                 p.setProperty(item + "status", menuItem.status().name());
+                p.setProperty(item + "description", menuItem.description());
+                p.setProperty(item + "imageUrl", menuItem.imageUrl());
             }
         }
         try {
@@ -78,8 +81,9 @@ public final class RestaurantService {
 
     public View provision(User owner, String name) {
         if (owner.role() != Role.RESTAURANT) throw new SecurityException("Restaurant account required");
-        if (name == null || name.isBlank() || name.trim().length() > 80)
-            throw new IllegalArgumentException("Enter a restaurant name (up to 80 characters)");
+        if (name == null || name.isBlank()) name = "My restaurant";
+        if (name.trim().length() > 80)
+            throw new IllegalArgumentException("Restaurant name must be at most 80 characters");
         String id = UUID.nameUUIDFromBytes(("signup:" + owner.id()).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
         if (!restaurants.containsKey(id)) {
             int hash = Math.abs(id.hashCode() % 10000);

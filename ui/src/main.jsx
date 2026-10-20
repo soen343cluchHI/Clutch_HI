@@ -168,10 +168,6 @@ function App() {
 
   async function submit(event) {
     event.preventDefault();
-    if ((registering || (user && !profile)) && signupRole === 'Restaurant' && !restaurantName.trim()) {
-      setError('Enter a restaurant name.');
-      return;
-    }
     setBusy(true);
     setSavingSignup(registering || Boolean(user && !profile));
     setSignupFailure('');

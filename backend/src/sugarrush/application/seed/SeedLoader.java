@@ -6,10 +6,27 @@ import java.nio.file.*;
 import java.util.*;
 import sugarrush.application.auth.RegistrationService;
 import sugarrush.application.restaurant.RestaurantService;
+import sugarrush.application.profile.ProfileService;
 import sugarrush.domain.restaurant.*;
 import sugarrush.domain.user.*;
 
 public final class SeedLoader {
+    public void loadProfiles(Path path, RegistrationService registration, ProfileService profiles) throws IOException {
+        Properties p = new Properties();
+        try (Reader reader = Files.newBufferedReader(path)) { p.load(reader); }
+        for (String username : ids(p, "profiles")) {
+            User user = registration.byUsername(username);
+            String base = "profile." + username + ".";
+            Profile profile = new Profile(p.getProperty(base + "displayName", ""),
+                    p.getProperty(base + "phone", ""), p.getProperty(base + "deliveryAddress", ""),
+                    p.getProperty(base + "vehicle", ""));
+            for (var entry : profile.values().entrySet())
+                if (!entry.getValue().isEmpty() && !Profile.editableFields(user.role()).contains(entry.getKey()))
+                    throw new IllegalArgumentException("Profile field " + entry.getKey() + " is not editable by " + user.role());
+            profiles.put(user.id(), profile);
+        }
+    }
+
     public void load(Path path, RegistrationService registration, RestaurantService restaurants) throws IOException {
         Properties p = new Properties();
         try (Reader reader = Files.newBufferedReader(path)) {

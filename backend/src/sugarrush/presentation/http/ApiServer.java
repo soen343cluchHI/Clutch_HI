@@ -193,7 +193,8 @@ public final class ApiServer {
             case CREATE_RESTAURANT -> new Command(token, action, null, null, null, required(fields, "name"), null, null);
             case PUT_MENU_ITEM -> new Command(token, action, required(fields, "restaurantId"), null, null, null, null,
                     new MenuItem(required(fields, "itemId"), required(fields, "name"),
-                            new BigDecimal(required(fields, "price")), MenuItem.Status.valueOf(required(fields, "itemStatus"))));
+                            new BigDecimal(required(fields, "price")), MenuItem.Status.valueOf(required(fields, "itemStatus")),
+                            fields.get("description"), fields.get("imageUrl")));
             case DELETE_MENU_ITEM -> new Command(token, action, required(fields, "restaurantId"), null, null,
                     required(fields, "itemId"), null, null);
             case RESTAURANT_QUEUE ->
@@ -268,7 +269,9 @@ public final class ApiServer {
         if (data.get("menu") instanceof List<?> menu) for (Object raw : menu) {
             if (!(raw instanceof Map<?, ?> item)) continue;
             restaurant.putItem(new MenuItem(String.valueOf(item.get("id")), String.valueOf(item.get("name")),
-                    new BigDecimal(String.valueOf(item.get("price"))), MenuItem.Status.valueOf(String.valueOf(item.get("status")))));
+                    new BigDecimal(String.valueOf(item.get("price"))), MenuItem.Status.valueOf(String.valueOf(item.get("status"))),
+                    item.get("description") == null ? "" : String.valueOf(item.get("description")),
+                    item.get("imageUrl") == null ? "" : String.valueOf(item.get("imageUrl"))));
         }
         return restaurant;
     }

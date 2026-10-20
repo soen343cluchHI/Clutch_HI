@@ -128,17 +128,24 @@ async function start() {
   }
 
   const port = await freePort(8080);
-  const envFile = await fs.readFile(path.join(ui, '.env.local'), 'utf8').catch(() => '');
-  const databaseUrl = process.env.VITE_FIREBASE_DATABASE_URL || envFile.match(/^VITE_FIREBASE_DATABASE_URL=(.*)$/m)?.[1]?.trim()?.replace(/^['"]|['"]$/g, '');
+  const localEnv = await fs.readFile(path.join(ui, '.env.local'), 'utf8').catch(() => '');
+  const productionEnv = await fs.readFile(path.join(ui, '.env.production'), 'utf8').catch(() => '');
+  const configuredUrl = (contents) => contents.match(/^VITE_FIREBASE_DATABASE_URL=(.*)$/m)?.[1]?.trim()?.replace(/^['"]|['"]$/g, '');
+  const databaseUrl = process.env.VITE_FIREBASE_DATABASE_URL || configuredUrl(localEnv) || configuredUrl(productionEnv);
+  if (!databaseUrl) throw new Error('Set VITE_FIREBASE_DATABASE_URL in ui/.env.local or ui/.env.production.');
+  const seed = process.env.SUGARRUSH_SEED || 'backend/config/demo.properties';
+  const remoteRestaurants = process.env.SUGARRUSH_REMOTE_RESTAURANTS || (seed.endsWith('demo.properties') ? 'false' : 'true');
+  const demoProfiles = process.env.SUGARRUSH_DEMO_PROFILES || (seed.endsWith('demo.properties') ? 'true' : 'false');
   const backend = spawnOwned(java, [
     '--add-modules',
     'jdk.httpserver',
     '-cp',
     output,
     'sugarrush.presentation.http.ApiServer',
-    process.env.SUGARRUSH_SEED || 'backend/config/demo.properties',
+    seed,
     String(port),
-  ], { env: { ...process.env, SUGARRUSH_DATABASE_URL: databaseUrl || '' } });
+  ], { env: { ...process.env, SUGARRUSH_DATABASE_URL: databaseUrl,
+    SUGARRUSH_REMOTE_RESTAURANTS: remoteRestaurants, SUGARRUSH_DEMO_PROFILES: demoProfiles } });
   backend.once('error', (error) => {
     console.error(error.message);
     shutdown(1);
@@ -154,6 +161,7 @@ async function start() {
   const frontend = npmCommand('run dev -- --open', ui, {
     ...process.env,
     SUGARRUSH_API_URL: `http://127.0.0.1:${port}`,
+    VITE_FIREBASE_DATABASE_URL: databaseUrl,
   });
   frontend.once('error', (error) => {
     console.error(error.message);

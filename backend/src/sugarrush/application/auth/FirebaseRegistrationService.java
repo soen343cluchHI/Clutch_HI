@@ -10,11 +10,11 @@ import sugarrush.domain.user.Role;
 public final class FirebaseRegistrationService {
     public record Enrollment(Role role, String restaurantName) {
         public Enrollment {
-            if (role == null || role == Role.OPERATOR)
-                throw new IllegalArgumentException("Public registration supports Customer, Restaurant and Courier only");
+            if (role == null)
+                throw new IllegalArgumentException("Choose an account type");
             restaurantName = restaurantName == null ? "" : restaurantName.trim();
-            if (role == Role.RESTAURANT && (restaurantName.isEmpty() || restaurantName.length() > 80))
-                throw new IllegalArgumentException("Enter a restaurant name (up to 80 characters)");
+            if (role == Role.RESTAURANT && restaurantName.length() > 80)
+                throw new IllegalArgumentException("Restaurant name must be at most 80 characters");
             if (role != Role.RESTAURANT && !restaurantName.isEmpty())
                 throw new IllegalArgumentException("Only restaurant accounts can specify a restaurant name");
         }

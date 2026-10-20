@@ -20,10 +20,10 @@
           ".validate": false
         },
         "requestedRole": {
-          ".validate": "newData.val() === 'Customer' || newData.val() === 'Restaurant' || newData.val() === 'Courier'"
+          ".validate": "newData.val() === 'Customer' || newData.val() === 'Restaurant' || newData.val() === 'Courier' || newData.val() === 'Operator'"
         },
         "restaurantName": {
-          ".validate": "newData.isString() && ((newData.parent().child('requestedRole').val() === 'Restaurant' && newData.val().length > 0 && newData.val().length <= 80) || (newData.parent().child('requestedRole').val() !== 'Restaurant' && newData.val() === ''))"
+          ".validate": "newData.isString() && ((newData.parent().child('requestedRole').val() === 'Restaurant' && newData.val().length <= 80) || (newData.parent().child('requestedRole').val() !== 'Restaurant' && newData.val() === ''))"
         }
       }
     },
@@ -64,10 +64,10 @@
         ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.exists()",
         ".validate": "newData.hasChildren(['role', 'restaurantName'])",
         "role": {
-          ".validate": "newData.val() === 'CUSTOMER' || newData.val() === 'RESTAURANT' || newData.val() === 'COURIER'"
+          ".validate": "newData.val() === 'CUSTOMER' || newData.val() === 'RESTAURANT' || newData.val() === 'COURIER' || newData.val() === 'OPERATOR'"
         },
         "restaurantName": {
-          ".validate": "newData.isString() && ((newData.parent().child('role').val() === 'RESTAURANT' && newData.val().length > 0 && newData.val().length <= 80) || (newData.parent().child('role').val() !== 'RESTAURANT' && newData.val() === ''))"
+          ".validate": "newData.isString() && ((newData.parent().child('role').val() === 'RESTAURANT' && newData.val().length <= 80) || (newData.parent().child('role').val() !== 'RESTAURANT' && newData.val() === ''))"
         },
         "$other": {
           ".validate": false

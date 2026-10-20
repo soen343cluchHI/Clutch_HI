@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import RestaurantCover from './RestaurantCover';
+import MenuItemImage from './MenuItemImage';
 import { queueBand } from './SimulatorMap';
 import '../styles/customer.css';
 
@@ -221,8 +222,10 @@ export default function CustomerView({ restaurants, orders, disabled, money, onP
                 key={item.id}
                 className={`menu-card${item.status === 'AVAILABLE' ? '' : ' menu-card-sold-out'}`}
               >
+                <MenuItemImage item={item} />
                 <div>
                   <strong>{item.name}</strong>
+                  {item.description && <p>{item.description}</p>}
                   <p>{money(item.price)}</p>
                   {item.status !== 'AVAILABLE' && <span className="sold-out-tag">Sold out</span>}
                 </div>

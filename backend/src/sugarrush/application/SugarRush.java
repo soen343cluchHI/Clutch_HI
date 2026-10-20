@@ -60,6 +60,8 @@ public final class SugarRush {
     public static SugarRush fromSeed(Path path) throws IOException {
         SugarRush app = new SugarRush();
         new SeedLoader().load(path, app.registration, app.restaurants);
+        if ("true".equalsIgnoreCase(System.getenv("SUGARRUSH_DEMO_PROFILES")))
+            new SeedLoader().loadProfiles(Path.of("backend/config/demo-profiles.properties"), app.registration, app.profiles);
         if (path.getFileName().toString().equals("live.properties")
                 && !"true".equalsIgnoreCase(System.getenv("SUGARRUSH_REMOTE_RESTAURANTS"))) {
             app.restaurants.useStore(Path.of("backend/data/restaurants.properties"));

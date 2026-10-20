@@ -304,6 +304,20 @@
   border-bottom: 1px solid var(--border);
   overflow-wrap: anywhere;
 }
+.menu-item-image {
+  width: 76px;
+  height: 76px;
+  flex: 0 0 76px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.menu-item-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .menu-card:last-child {
   border-bottom: 0;
 }

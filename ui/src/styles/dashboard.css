@@ -71,6 +71,7 @@
   font-weight: 550;
 }
 .dashboard input,
+.dashboard textarea,
 .dashboard select {
   width: 100%;
   min-height: 44px;
@@ -81,6 +82,9 @@
   border-radius: var(--radius-control);
   font: inherit;
 }
+.dashboard textarea { min-height: 88px; resize: vertical; }
+.menu-list li > div:nth-child(2) { flex: 1; min-width: 0; }
+.menu-list .menu-item-image { width: 64px; height: 64px; flex-basis: 64px; }
 .dashboard input:disabled {
   opacity: 0.55;
 }

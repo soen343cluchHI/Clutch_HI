@@ -1,9 +1,11 @@
 # Clutch_HI
 Repository for SOEN343 project. Team name is Clutch_HI
 
-Run `npm run dev` to start the frontend and Java backend with Firebase login, approved UID mappings, and the seeded Pastry Montreal and Nice Ice restaurants from `backend/config/demo.properties`. Demo orders and changes reset when the backend restarts.
+Run `npm run dev` to start the frontend and Java backend with Firebase login and local demo data. The launcher loads the accounts and Pastry Montreal/Nice Ice restaurants in `backend/config/demo.properties`, plus the per-role profiles in `backend/config/demo-profiles.properties`. The launcher reads the Firebase database URL from the environment, `ui/.env.local`, or `ui/.env.production` for login. Demo orders and edits to seeded restaurants reset when the backend restarts.
 
-For the persistent restaurant configuration, run `SUGARRUSH_SEED=backend/config/live.properties npm run dev`. That configuration contains no seeded restaurants and saves owner-created restaurants in `backend/data/restaurants.properties`.
+To use the deployed Firebase restaurants during local development, set `SUGARRUSH_SEED=backend/config/live.properties` before running `npm run dev`. The deployed service continues to use its own configuration in `render.yaml`.
+
+The demo usernames/passwords in `demo.properties` are backend fixtures, not Firebase login credentials. The UI signs in through Firebase; the configured Firebase UIDs in the seed file map existing Firebase users to the restaurant, courier, and operator demo accounts. An unmapped Firebase user remains a customer with their own profile.
 
 Team members:
 

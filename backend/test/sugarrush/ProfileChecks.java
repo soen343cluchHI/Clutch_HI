@@ -5,6 +5,8 @@ import java.util.*;
 import sugarrush.application.SugarRush;
 import sugarrush.application.commands.*;
 import sugarrush.application.profile.ProfileService;
+import sugarrush.application.auth.RegistrationService;
+import sugarrush.application.seed.SeedLoader;
 import sugarrush.domain.user.*;
 
 public final class ProfileChecks {
@@ -47,6 +49,26 @@ public final class ProfileChecks {
         update(app, courier, Map.of("displayName", "Cora Courier", "vehicle", "Bike"));
         check(view(app, courier).profile().vehicle().equals("Bike"), "Courier vehicle not saved");
         check(view(app, staff).profile().equals(Profile.EMPTY), "Profiles leaked between users");
+        RegistrationService demoAccounts = new RegistrationService();
+        for (String name : List.of("customer", "restaurant", "restaurant2", "courier", "operator"))
+            demoAccounts.register(name, "demo-password", List.of(switch (name) {
+                case "customer" -> Role.CUSTOMER;
+                case "courier" -> Role.COURIER;
+                case "operator" -> Role.OPERATOR;
+                default -> Role.RESTAURANT;
+            }));
+        ProfileService demoProfiles = new ProfileService();
+        new SeedLoader().loadProfiles(Path.of("backend/config/demo-profiles.properties"), demoAccounts, demoProfiles);
+        check(demoProfiles.view(demoAccounts.byUsername("customer")).profile().deliveryAddress().contains("Montreal"),
+                "Customer demo profile missing");
+        check(demoProfiles.view(demoAccounts.byUsername("restaurant")).profile().displayName().contains("Pastry"),
+                "Restaurant demo profile missing");
+        check(demoProfiles.view(demoAccounts.byUsername("restaurant2")).profile().displayName().contains("Nice Ice"),
+                "Second restaurant demo profile missing");
+        check(demoProfiles.view(demoAccounts.byUsername("courier")).profile().vehicle().equals("Bike"),
+                "Courier demo profile missing");
+        check(demoProfiles.view(demoAccounts.byUsername("operator")).profile().displayName().contains("Operator"),
+                "Operator demo profile missing");
         List<?> commands = (List<?>) app.execute(new Command(operator.token(), Action.COMMAND_LOG));
         check(commands.stream().map(CommandLog.Entry.class::cast)
                 .anyMatch(e -> e.action() == Action.UPDATE_PROFILE && !e.success()), "Profile errors not logged");

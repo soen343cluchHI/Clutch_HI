@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import CustomerView from '../components/CustomerView';
 import Logo from '../components/Logo';
+import MenuItemImage from '../components/MenuItemImage';
 import ProfilePanel from '../components/ProfilePanel';
 import SimulatorMap, { queueBand } from '../components/SimulatorMap';
 import * as api from '../services/dashboardApi';
@@ -35,6 +36,8 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
   const [newRestaurantName, setNewRestaurantName] = useState('');
   const [itemName, setItemName] = useState('');
   const [itemPrice, setItemPrice] = useState('');
+  const [itemDescription, setItemDescription] = useState('');
+  const [itemImageUrl, setItemImageUrl] = useState('');
   const [editingItemId, setEditingItemId] = useState('');
   const [reasons, setReasons] = useState({});
   const [logs, setLogs] = useState([]);
@@ -175,11 +178,14 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
         itemId: editingItemId || crypto.randomUUID(),
         name: itemName.trim(),
         price: Number(itemPrice).toFixed(2),
+        description: itemDescription.trim(), imageUrl: itemImageUrl.trim(),
         itemStatus: editingItemId ? restaurant.menu.find((item) => item.id === editingItemId)?.status : 'AVAILABLE',
       });
       setEditingItemId('');
       setItemName('');
       setItemPrice('');
+      setItemDescription('');
+      setItemImageUrl('');
       await refresh(session);
     });
   }
@@ -187,7 +193,8 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
   function changeItemStatus(item) {
     run(async () => {
       await send(session, 'PUT_MENU_ITEM', { restaurantId, itemId: item.id, name: item.name,
-        price: Number(item.price).toFixed(2), itemStatus: item.status === 'AVAILABLE' ? 'SOLD_OUT' : 'AVAILABLE' });
+        price: Number(item.price).toFixed(2), itemStatus: item.status === 'AVAILABLE' ? 'SOLD_OUT' : 'AVAILABLE',
+        description: item.description || '', imageUrl: item.imageUrl || '' });
       await refresh(session);
     });
   }
@@ -292,14 +299,16 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
               <ul className="menu-list">
                 {restaurant.menu.map((item) => (
                   <li key={item.id}>
+                    <MenuItemImage item={item} />
                     <div>
                       <strong>{item.name}</strong>
+                      {item.description && <p>{item.description}</p>}
                       <p>
                         {money(item.price)} · {item.status === 'SOLD_OUT' ? 'Sold out' : 'Available'}
                       </p>
                     </div>
                     {role === 'RESTAURANT' && <div className="menu-owner-actions">
-                      <button className="btn btn-secondary" type="button" disabled={disabled} onClick={() => { setEditingItemId(item.id); setItemName(item.name); setItemPrice(String(item.price)); }}>Edit</button>
+                      <button className="btn btn-secondary" type="button" disabled={disabled} onClick={() => { setEditingItemId(item.id); setItemName(item.name); setItemPrice(String(item.price)); setItemDescription(item.description || ''); setItemImageUrl(item.imageUrl || ''); }}>Edit</button>
                       <button className="btn btn-secondary" type="button" disabled={disabled} onClick={() => changeItemStatus(item)}>{item.status === 'AVAILABLE' ? 'Mark sold out' : 'Mark available'}</button>
                       <button className="btn btn-danger-outline" type="button" disabled={disabled} onClick={() => deleteMenuItem(item)}>Delete</button>
                     </div>}
@@ -311,8 +320,10 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
               <h3>{editingItemId ? 'Edit menu item' : 'Add menu item'}</h3>
               <label>Item name<input required maxLength="80" value={itemName} onChange={(e) => setItemName(e.target.value)} /></label>
               <label>Price (CAD)<input required type="number" min="0" step="0.01" value={itemPrice} onChange={(e) => setItemPrice(e.target.value)} /></label>
+              <label>Description (optional)<textarea maxLength="500" value={itemDescription} onChange={(e) => setItemDescription(e.target.value)} /></label>
+              <label>Image URL (optional)<input type="url" maxLength="2048" placeholder="https://example.com/item.jpg" value={itemImageUrl} onChange={(e) => setItemImageUrl(e.target.value)} /></label>
               <div className="menu-owner-actions"><button className="btn btn-primary" disabled={disabled}>{editingItemId ? 'Save item' : 'Add item'}</button>
-                {editingItemId && <button className="btn btn-secondary" type="button" onClick={() => { setEditingItemId(''); setItemName(''); setItemPrice(''); }}>Cancel</button>}
+                {editingItemId && <button className="btn btn-secondary" type="button" onClick={() => { setEditingItemId(''); setItemName(''); setItemPrice(''); setItemDescription(''); setItemImageUrl(''); }}>Cancel</button>}
               </div>
             </form>}
             {role === 'RESTAURANT' && (

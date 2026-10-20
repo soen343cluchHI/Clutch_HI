@@ -1,13 +1,9 @@
-import { useState } from 'react';
 import Field from '../components/Field';
 import FormAlert from '../components/FormAlert';
 
 export default function AuthPage({ registering, resettingPassword, resetSent, email, setEmail, password,
   setPassword, busy, error, onSubmit, onResetPassword, onForgotPassword, onBackToSignIn,
   onToggleMode, signupRole, onSignupRoleChange, restaurantName, setRestaurantName, authenticatedSignup = false }) {
-  const [details, setDetails] = useState({ operatorCode: '' });
-  const specialSignup = registering && !resettingPassword && signupRole !== 'Customer';
-  const updateDetail = name => event => setDetails(current => ({ ...current, [name]: event.target.value }));
   return (
     <section className="panel" key={resettingPassword ? 'reset' : registering ? 'register' : 'login'}>
       <header className="panel-header">
@@ -20,10 +16,11 @@ export default function AuthPage({ registering, resettingPassword, resetSent, em
         {registering && !resettingPassword && <fieldset className="role-picker" disabled={busy}>
           <legend>Account type</legend>
           <div className="role-grid signup-role-grid">
-            {['Customer', 'Restaurant', 'Courier'].map(option => <label className="role-option" key={option}>
+            {['Customer', 'Restaurant', 'Courier', 'Operator'].map(option => <label className="role-option" key={option}>
               <input type="radio" name="signupRole" value={option} checked={signupRole === option}
-                onChange={() => { onSignupRoleChange(option); setDetails(current => ({ ...current, operatorCode: '' })); }} />
+                onChange={() => onSignupRoleChange(option)} />
               <span className="role-name">{option}</span>
+              {option === 'Operator' && <span className="role-desc">Operator sign-up is available for this iteration only. Normally, operator accounts cannot be created through sign-up.</span>}
             </label>)}
           </div>
         </fieldset>}
@@ -32,16 +29,9 @@ export default function AuthPage({ registering, resettingPassword, resetSent, em
           autoComplete={registering ? 'new-password' : 'current-password'} minLength={registering ? 6 : undefined}
           hint={registering ? 'At least 6 characters.' : undefined}
           value={password} onChange={(e) => setPassword(e.target.value)} />}
-        {specialSignup && <>
-          {signupRole === 'Restaurant' && <Field label="Restaurant name" name="restaurantName" autoComplete="organization" maxLength={80} required
+        {registering && signupRole === 'Restaurant' && !resettingPassword &&
+          <Field label="Restaurant name (optional)" name="restaurantName" autoComplete="organization" maxLength={80}
             value={restaurantName} onChange={event => setRestaurantName(event.target.value)} />}
-          <div className="operator-code-disabled" title="Operator approval not implemented yet" tabIndex={0} aria-label="Operator approval not implemented yet">
-            <fieldset disabled>
-              <Field label="Operator signup code" type="password" name="operatorCode" autoComplete="off" required
-                hint="Use the code provided by your operator." value={details.operatorCode} onChange={updateDetail('operatorCode')} />
-            </fieldset>
-          </div>
-        </>}
         {!registering && !resettingPassword && <button type="button" className="btn-link forgot-link" disabled={busy} onClick={onForgotPassword}>Forgot password?</button>}
         <FormAlert message={error} />
         {resetSent && <p className="form-success" role="status">If this email has an account, check your inbox for a reset link.</p>}
