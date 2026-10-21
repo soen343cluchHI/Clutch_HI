@@ -137,6 +137,7 @@ async function start() {
   const remoteRestaurants = process.env.SUGARRUSH_REMOTE_RESTAURANTS || (seed.endsWith('demo.properties') ? 'false' : 'true');
   const demoProfiles = process.env.SUGARRUSH_DEMO_PROFILES || (seed.endsWith('demo.properties') ? 'true' : 'false');
   const backend = spawnOwned(java, [
+    '-Djava.net.preferIPv4Stack=true', // Match freePort() and the Vite proxy's IPv4 loopback address.
     '--add-modules',
     'jdk.httpserver',
     '-cp',
@@ -144,7 +145,7 @@ async function start() {
     'sugarrush.presentation.http.ApiServer',
     seed,
     String(port),
-  ], { env: { ...process.env, SUGARRUSH_DATABASE_URL: databaseUrl,
+  ], { env: { ...process.env, SUGARRUSH_BIND_HOST: '127.0.0.1', SUGARRUSH_DATABASE_URL: databaseUrl,
     SUGARRUSH_REMOTE_RESTAURANTS: remoteRestaurants, SUGARRUSH_DEMO_PROFILES: demoProfiles } });
   backend.once('error', (error) => {
     console.error(error.message);

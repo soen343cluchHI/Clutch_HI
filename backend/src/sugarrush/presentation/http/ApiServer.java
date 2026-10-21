@@ -90,7 +90,9 @@ public final class ApiServer {
     }
 
     HttpServer start(int port) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+        String bindHost = System.getenv("SUGARRUSH_BIND_HOST");
+        InetSocketAddress address = bindHost == null ? new InetSocketAddress(port) : new InetSocketAddress(bindHost, port);
+        HttpServer server = HttpServer.create(address, 0);
         server.createContext("/api/", this::handle);
         server.start();
         return server;
