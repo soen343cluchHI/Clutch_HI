@@ -71,6 +71,8 @@ public final class OrderService {
             event = order.ready();
             r.queue().complete(id);
         }
+        case "CONFIRM_PICKUP" -> event = order.pickUp();
+        case "CONFIRM_DELIVERY" -> event = order.deliver();
         default -> throw new IllegalArgumentException("Unknown order action");
         }
         publisher.publish(event);

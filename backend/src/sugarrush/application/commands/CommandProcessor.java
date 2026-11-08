@@ -1,6 +1,7 @@
 package sugarrush.application.commands;
 
 import sugarrush.application.auth.AuthenticationService;
+import sugarrush.application.courier.CourierService;
 import sugarrush.application.events.*;
 import sugarrush.application.order.OrderService;
 import sugarrush.application.profile.ProfileService;
@@ -12,10 +13,11 @@ public final class CommandProcessor {
     private final CommandLog log;
 
     public CommandProcessor(AuthenticationService auth, RestaurantService restaurants, OrderService orders,
-            ProfileService profiles, EventLogger events, DashboardObserver dashboard, CommandLog log) {
+            ProfileService profiles, CourierService couriers, EventLogger events, DashboardObserver dashboard,
+            CommandLog log) {
         this.log = log;
-        first = new AuthenticationHandler(auth, new AuthorizationHandler(restaurants, orders,
-                new ExecutionHandler(auth, restaurants, orders, profiles, events, dashboard, log)));
+        first = new AuthenticationHandler(auth, new AuthorizationHandler(restaurants, orders, couriers,
+                new ExecutionHandler(auth, restaurants, orders, profiles, couriers, events, dashboard, log)));
     }
 
     // Serialize in-memory commands so state, queue and event updates cannot interleave.

@@ -1,6 +1,7 @@
 package sugarrush.application.commands;
 
 import sugarrush.application.auth.AuthenticationService;
+import sugarrush.application.courier.CourierService;
 import sugarrush.application.events.*;
 import sugarrush.application.order.OrderService;
 import sugarrush.application.profile.ProfileService;
@@ -13,17 +14,20 @@ public final class ExecutionHandler extends CommandHandler {
     private final RestaurantService restaurants;
     private final OrderService orders;
     private final ProfileService profiles;
+    private final CourierService couriers;
     private final EventLogger events;
     private final DashboardObserver dashboard;
     private final CommandLog log;
 
     public ExecutionHandler(AuthenticationService auth, RestaurantService restaurants, OrderService orders,
-            ProfileService profiles, EventLogger events, DashboardObserver dashboard, CommandLog log) {
+            ProfileService profiles, CourierService couriers, EventLogger events, DashboardObserver dashboard,
+            CommandLog log) {
         super(null);
         this.auth = auth;
         this.restaurants = restaurants;
         this.orders = orders;
         this.profiles = profiles;
+        this.couriers = couriers;
         this.events = events;
         this.dashboard = dashboard;
         this.log = log;
@@ -63,6 +67,11 @@ public final class ExecutionHandler extends CommandHandler {
         }
         case VIEW_PROFILE -> profiles.view(user);
         case UPDATE_PROFILE -> profiles.update(user, c.fields());
+        case COURIER_STATUS -> couriers.view(user);
+        case GO_ON_DUTY -> couriers.goOnDuty(user);
+        case GO_OFF_DUTY -> couriers.goOffDuty(user);
+        case CONFIRM_PICKUP -> couriers.confirmPickup(user, c.orderId());
+        case CONFIRM_DELIVERY -> couriers.confirmDelivery(user, c.orderId());
         case DASHBOARD -> dashboard.snapshot();
         case EVENT_LOG -> events.all();
         case COMMAND_LOG -> log.all();
