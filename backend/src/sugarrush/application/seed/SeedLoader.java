@@ -5,8 +5,10 @@ import java.math.BigDecimal;
 import java.nio.file.*;
 import java.util.*;
 import sugarrush.application.auth.RegistrationService;
+import sugarrush.application.courier.CourierService;
 import sugarrush.application.restaurant.RestaurantService;
 import sugarrush.application.profile.ProfileService;
+import sugarrush.domain.courier.Courier;
 import sugarrush.domain.restaurant.*;
 import sugarrush.domain.user.*;
 
@@ -27,7 +29,8 @@ public final class SeedLoader {
         }
     }
 
-    public void load(Path path, RegistrationService registration, RestaurantService restaurants) throws IOException {
+    public void load(Path path, RegistrationService registration, RestaurantService restaurants,
+            CourierService couriers) throws IOException {
         Properties p = new Properties();
         try (Reader reader = Files.newBufferedReader(path)) {
             p.load(reader);
@@ -56,6 +59,14 @@ public final class SeedLoader {
                                 MenuItem.Status.valueOf(required(p, prefix + "status"))));
             }
             restaurants.add(r);
+        }
+        for (String key : optionalIds(p, "couriers")) {
+            String base = "courier." + key + ".";
+            User account = registration.byUsername(required(p, base + "account"));
+            if (account.role() != Role.COURIER)
+                throw new IllegalArgumentException("Courier account must have courier role");
+            couriers.add(new Courier(Integer.parseInt(key), account.id(), Double.parseDouble(required(p, base + "x")),
+                    Double.parseDouble(required(p, base + "y"))));
         }
     }
 

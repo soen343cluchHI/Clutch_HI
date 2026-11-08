@@ -1,5 +1,7 @@
 package sugarrush.application.commands;
 
+import java.util.Objects;
+import sugarrush.application.courier.CourierService;
 import sugarrush.application.order.OrderService;
 import sugarrush.application.restaurant.RestaurantService;
 import sugarrush.domain.order.Order;
@@ -7,14 +9,17 @@ import sugarrush.domain.user.Role;
 import sugarrush.domain.user.User;
 
 public final class AuthorizationHandler extends CommandHandler {
-    
+
     private final RestaurantService restaurants;
     private final OrderService orders;
+    private final CourierService couriers;
 
-    public AuthorizationHandler(RestaurantService restaurants, OrderService orders, CommandHandler next) {
+    public AuthorizationHandler(RestaurantService restaurants, OrderService orders, CourierService couriers,
+            CommandHandler next) {
         super(next);
         this.restaurants = restaurants;
         this.orders = orders;
+        this.couriers = couriers;
     }
 
     @Override
@@ -35,6 +40,12 @@ public final class AuthorizationHandler extends CommandHandler {
 
             if (user.role() == Role.OPERATOR && order.state().equals("Placed"))
                 throw new SecurityException("Placed orders are cancelled by the customer");
+        }
+
+        if (c.action() == Action.CONFIRM_PICKUP || c.action() == Action.CONFIRM_DELIVERY) {
+            orders.require(c.orderId());
+            if (!Objects.equals(couriers.require(user).orderId(), c.orderId()))
+                throw new SecurityException("Only the assigned courier can confirm this order");
         }
 
         String id = switch (c.action()) {   //get the restaurant id for actions that require it

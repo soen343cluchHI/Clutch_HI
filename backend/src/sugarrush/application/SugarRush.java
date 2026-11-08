@@ -7,6 +7,7 @@ import java.io.Reader;
 import java.nio.file.Files;
 import sugarrush.application.auth.*;
 import sugarrush.application.commands.*;
+import sugarrush.application.courier.CourierService;
 import sugarrush.application.events.*;
 import sugarrush.application.order.OrderService;
 import sugarrush.application.profile.ProfileService;
@@ -24,8 +25,9 @@ public final class SugarRush {
     private final CommandLog log = new CommandLog();
     private final OrderService orders = new OrderService(restaurants, publisher);
     private final ProfileService profiles = new ProfileService();
+    private final CourierService couriers = new CourierService(orders);
     private final CommandProcessor commands = new CommandProcessor(authentication, restaurants, orders, profiles,
-            events, dashboard, log);
+            couriers, events, dashboard, log);
     private final Map<String, User> firebaseAccounts = new HashMap<>();
     private final Map<String, Session> firebaseSessions = new HashMap<>();
     private final FirebaseRegistrationService firebaseRegistrations = new FirebaseRegistrationService();
@@ -59,7 +61,7 @@ public final class SugarRush {
 
     public static SugarRush fromSeed(Path path) throws IOException {
         SugarRush app = new SugarRush();
-        new SeedLoader().load(path, app.registration, app.restaurants);
+        new SeedLoader().load(path, app.registration, app.restaurants, app.couriers);
         if ("true".equalsIgnoreCase(System.getenv("SUGARRUSH_DEMO_PROFILES")))
             new SeedLoader().loadProfiles(Path.of("backend/config/demo-profiles.properties"), app.registration, app.profiles);
         if (path.getFileName().toString().equals("live.properties")
@@ -89,7 +91,9 @@ public final class SugarRush {
     public synchronized User register(String username, String password, Collection<Role> roles) {
         if (roles != null && roles.contains(Role.OPERATOR))
             throw new SecurityException("Operator accounts require trusted provisioning");
-        return registration.register(username, password, roles);
+        User user = registration.register(username, password, roles);
+        if (user.role() == Role.COURIER) couriers.provision(user);
+        return user;
     }
 
     public synchronized Session login(String username, String password) {
@@ -121,6 +125,7 @@ public final class SugarRush {
                 : new User(approved.id(), email, approved.role());
         if (approved == null && enrollment != null && enrollment.role() == Role.RESTAURANT)
             restaurants.provision(user, enrollment.restaurantName());
+        if (user.role() == Role.COURIER) couriers.provision(user);
         Session session = authentication.openSession(user);
         firebaseSessions.put(uid, session);
         return session;
