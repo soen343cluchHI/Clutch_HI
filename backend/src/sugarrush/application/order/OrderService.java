@@ -120,11 +120,11 @@ public final class OrderService {
         return view(order);
     }
 
-    public List<LedgerEntry> ledgerEntries() {
+        public List<LedgerEntry> ledgerEntries() {
         return ledger.all();
     }
 
-    private View view(Order o) {
+    public View view(Order o) {
         return new View(o.id(), o.customerId(), o.restaurantId(), o.lines(), pricing.calculate(o.total()), o.state(), o.rejectionReason());
     }
 
