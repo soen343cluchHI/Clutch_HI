@@ -27,7 +27,27 @@ public final class AuthorizationHandler extends CommandHandler {
 
         if (!c.action().permits(user.role()))
             throw new SecurityException("Action not permitted for " + user.role());
+        
+        // Ownership checks for each role
+        // Customers, restaurants can access their own orders
+        // Operators can access all orders
+        if (c.action() == Action.VIEW_ORDER_SUMMARY) {
+            Order order = orders.require(c.orderId());
 
+            if (user.role() == Role.CUSTOMER
+                    && !order.customerId().equals(user.id())) {
+                throw new SecurityException(
+                        "You can only view your own order summaries");
+            }
+
+            if (user.role() == Role.RESTAURANT
+                    && !restaurants.require(order.restaurantId())
+                            .ownerId().equals(user.id())) {
+                throw new SecurityException(
+                        "Restaurant ownership required");
+            }
+        }
+        
         if (c.action() == Action.CANCEL_ORDER) {
 
             Order order = orders.require(c.orderId());
