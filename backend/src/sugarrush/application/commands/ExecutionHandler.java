@@ -82,7 +82,7 @@ public final class ExecutionHandler extends CommandHandler {
         case DASHBOARD -> dashboard.snapshot();
         case EVENT_LOG -> events.all();
         case COMMAND_LOG -> log.all();
-        case LIST_LEDGER -> orders.ledgerEntries();
+        case LIST_LEDGER -> orders.ledgerEntries(user);
         };
     }
 }

@@ -8,8 +8,9 @@ public enum Action {
     ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY, SET_RESTAURANT_STATUS, PUT_MENU_ITEM, DASHBOARD, EVENT_LOG,
     COMMAND_LOG, CREATE_RESTAURANT, DELETE_MENU_ITEM, VIEW_PROFILE, UPDATE_PROFILE, COURIER_STATUS, GO_ON_DUTY,
     GO_OFF_DUTY, ACCEPT_DELIVERY_OFFER, COURIER_OFFER, CONFIRM_PICKUP, CONFIRM_DELIVERY, REASSIGN_ORDER, VIEW_ORDER_SUMMARY, LIST_LEDGER;
-
-    public boolean permits(Role role) {
+    
+    // all roles can request their filtered order and ledger history
+    public boolean permits(Role role) { //true here does not permit guests, the authentication handler still requires a valid session
         return switch (this) {
             case SESSION_INFO, LOGOUT, ROLE_MENU,
                     BROWSE_RESTAURANTS, VIEW_PROFILE,
@@ -18,8 +19,9 @@ public enum Action {
                 role == Role.CUSTOMER;
             case CANCEL_ORDER ->
                 role == Role.CUSTOMER || role == Role.OPERATOR;
-            case LIST_ORDERS, VIEW_ORDER_SUMMARY ->
-                role != Role.COURIER;           //Sets role permission:allows customers restaurants and operators to request summaries
+            case LIST_ORDERS, LIST_LEDGER -> true;//Sets role permission:allows customers restaurants and operators to request summaries
+            case VIEW_ORDER_SUMMARY ->
+                role != Role.COURIER;
             case RESTAURANT_QUEUE, ACCEPT_ORDER, REJECT_ORDER,
                     START_PREPARING, MARK_READY, PUT_MENU_ITEM,
                     CREATE_RESTAURANT, DELETE_MENU_ITEM ->
@@ -27,16 +29,13 @@ public enum Action {
             case SET_RESTAURANT_STATUS ->
                 role == Role.RESTAURANT || role == Role.OPERATOR;
             case DASHBOARD, EVENT_LOG, COMMAND_LOG,
-                    REASSIGN_ORDER, LIST_LEDGER ->
-                role == Role.OPERATOR; //only operators should receive the complete ledger
+                    REASSIGN_ORDER -> role == Role.OPERATOR; //only operators should receive the complete ledger
             case COURIER_STATUS, GO_ON_DUTY, GO_OFF_DUTY,
                     ACCEPT_DELIVERY_OFFER, COURIER_OFFER,
                     CONFIRM_PICKUP, CONFIRM_DELIVERY ->
                 role == Role.COURIER;
         };
     }
-
-
     public static List<Action> menu(Role role) {
         return Arrays.stream(values()).filter(a -> a.permits(role)).toList();
     }
