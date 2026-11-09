@@ -18,6 +18,11 @@ public final class OrderService {
     private final RestaurantService restaurants;
     private final OrderEventPublisher publisher;
     private final PricingService pricing;
+    private java.util.function.Consumer<String> readyHandler = id -> {};
+
+    public void onReady(java.util.function.Consumer<String> handler) {
+        readyHandler = Objects.requireNonNull(handler);
+    }
 
     public OrderService(RestaurantService restaurants, OrderEventPublisher publisher, PricingService pricing) {
         this.restaurants = restaurants;
@@ -80,10 +85,11 @@ public final class OrderService {
         default -> throw new IllegalArgumentException("Unknown order action");
         }
         publisher.publish(event);
+        if (action.equals("MARK_READY")) readyHandler.accept(id);
         return view(order);
     }
 
-    private View view(Order o) {
+    public View view(Order o) {
         return new View(o.id(), o.customerId(), o.restaurantId(), o.lines(), pricing.calculate(o.total()), o.state(), o.rejectionReason());
     }
 }

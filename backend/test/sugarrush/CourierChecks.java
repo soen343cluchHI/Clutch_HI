@@ -38,14 +38,32 @@ public final class CourierChecks {
                 .execute(Command.place(customer.token(), "sugar-shop", Map.of("cake", 1)));
         for (Action action : List.of(Action.ACCEPT_ORDER, Action.START_PREPARING, Action.MARK_READY))
             app.execute(Command.order(staff.token(), action, ready.id(), null));
-        expect(SecurityException.class,
+        expect(IllegalStateException.class,
                 () -> app.execute(Command.order(courier.token(), Action.CONFIRM_PICKUP, ready.id(), null)));
         expect(SecurityException.class,
                 () -> app.execute(Command.order(customer.token(), Action.CONFIRM_PICKUP, ready.id(), null)));
         expect(IllegalArgumentException.class,
                 () -> app.execute(Command.order(courier.token(), Action.CONFIRM_PICKUP, "missing", null)));
+        check(((OrderService.View) app.execute(new Command(courier.token(), Action.COURIER_OFFER))).id().equals(ready.id()),
+                "Ready order not offered automatically");
+        for (Action action : List.of(Action.ACCEPT_DELIVERY_OFFER, Action.CONFIRM_PICKUP, Action.CONFIRM_DELIVERY))
+            app.execute(Command.order(courier.token(), action, ready.id(), null));
         CourierService.View offDuty = (CourierService.View) app.execute(new Command(courier.token(), Action.GO_OFF_DUTY));
         check(offDuty.status() == Courier.Status.OFFLINE, "Courier not offline off duty");
+        List<String> waiting = new ArrayList<>();
+        for (int i = 0; i < 2; i++) {
+            var queued = (OrderService.View) app.execute(Command.place(customer.token(), "sugar-shop", Map.of("cake", 1)));
+            waiting.add(queued.id());
+            for (Action action : List.of(Action.ACCEPT_ORDER, Action.START_PREPARING, Action.MARK_READY))
+                app.execute(Command.order(staff.token(), action, queued.id(), null));
+        }
+        var assigned = (CourierService.View) app.execute(new Command(courier.token(), Action.GO_ON_DUTY));
+        check(waiting.get(0).equals(assigned.orderId()), "Command duty trigger did not dispatch oldest order");
+        for (Action action : List.of(Action.ACCEPT_DELIVERY_OFFER, Action.CONFIRM_PICKUP, Action.CONFIRM_DELIVERY))
+            app.execute(Command.order(courier.token(), action, waiting.get(0), null));
+        var nextOffer = (OrderService.View) app.execute(new Command(courier.token(), Action.COURIER_OFFER));
+        check(waiting.get(1).equals(nextOffer.id()) && nextOffer.state().equals("Ready"),
+                "Command delivery trigger did not dispatch next waiting order");
         User registered = app.register("rider", "password", List.of(Role.COURIER));
         Session rider = app.login(registered.username(), "password");
         CourierService.View provisioned = (CourierService.View) app.execute(new Command(rider.token(), Action.COURIER_STATUS));
@@ -83,6 +101,12 @@ public final class CourierChecks {
         expect(IllegalStateException.class, () -> couriers.goOffDuty(first));
         expect(IllegalStateException.class, () -> couriers.confirmDelivery(first, order));
         check(orders.require(order).state().equals("Ready"), "Failed delivery changed order");
+        expect(IllegalStateException.class, () -> couriers.confirmPickup(first, order));
+        expect(SecurityException.class, () -> couriers.acceptOffer(second, order));
+        expect(SecurityException.class, () -> couriers.confirmPickup(second, order));
+        check(orders.require(order).state().equals("Ready"), "Rejected pickup changed order");
+        couriers.acceptOffer(first, order);
+        expect(IllegalStateException.class, () -> couriers.acceptOffer(first, order));
         check(couriers.confirmPickup(first, order).state().equals("PickedUp"), "Order not picked up");
         check(couriers.view(first).status() == Courier.Status.CARRYING, "Courier not carrying");
         expect(IllegalStateException.class, () -> couriers.goOffDuty(first));
@@ -102,6 +126,7 @@ public final class CourierChecks {
         alone.goOnDuty();
         alone.assign("o");
         expect(IllegalStateException.class, () -> alone.pickUp("wrong"));
+        alone.acceptOffer("o");
         alone.pickUp("o");
         expect(IllegalStateException.class, () -> alone.deliver("wrong"));
         alone.deliver("o");

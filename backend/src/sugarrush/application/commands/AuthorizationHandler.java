@@ -42,7 +42,7 @@ public final class AuthorizationHandler extends CommandHandler {
                 throw new SecurityException("Placed orders are cancelled by the customer");
         }
 
-        if (c.action() == Action.CONFIRM_PICKUP || c.action() == Action.CONFIRM_DELIVERY) {
+        if (c.action() == Action.ACCEPT_DELIVERY_OFFER || c.action() == Action.CONFIRM_PICKUP || c.action() == Action.CONFIRM_DELIVERY) {
             orders.require(c.orderId());
             if (!Objects.equals(couriers.require(user).orderId(), c.orderId()))
                 throw new SecurityException("Only the assigned courier can confirm this order");

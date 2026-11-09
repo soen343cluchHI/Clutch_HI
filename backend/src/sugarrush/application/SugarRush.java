@@ -9,6 +9,7 @@ import sugarrush.application.auth.*;
 import sugarrush.application.commands.*;
 import sugarrush.application.courier.CourierService;
 import sugarrush.application.events.*;
+import sugarrush.application.dispatch.DispatchService;
 import sugarrush.application.order.OrderService;
 import sugarrush.application.pricing.PricingService;
 import sugarrush.application.profile.ProfileService;
@@ -57,8 +58,11 @@ public final class SugarRush {
     private SugarRush(PricingService pricing) {
         orders = new OrderService(restaurants, publisher, pricing);
         couriers = new CourierService(orders);
+        DispatchService dispatch = new DispatchService(orders, couriers, restaurants);
+        orders.onReady(dispatch::onOrderReady);
+        couriers.onAvailable(dispatch::retryWaitingOrders);
         commands = new CommandProcessor(authentication, restaurants, orders, profiles,
-                couriers, events, dashboard, log);
+                couriers, dispatch, events, dashboard, log);
         publisher.subscribe(events);
         publisher.subscribe(dashboard);
     }
