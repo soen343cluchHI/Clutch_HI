@@ -83,6 +83,12 @@ public final class CourierChecks {
         expect(IllegalStateException.class, () -> couriers.goOffDuty(first));
         expect(IllegalStateException.class, () -> couriers.confirmDelivery(first, order));
         check(orders.require(order).state().equals("Ready"), "Failed delivery changed order");
+        expect(IllegalStateException.class, () -> couriers.confirmPickup(first, order));
+        expect(SecurityException.class, () -> couriers.acceptOffer(second, order));
+        expect(SecurityException.class, () -> couriers.confirmPickup(second, order));
+        check(orders.require(order).state().equals("Ready"), "Rejected pickup changed order");
+        couriers.acceptOffer(first, order);
+        expect(IllegalStateException.class, () -> couriers.acceptOffer(first, order));
         check(couriers.confirmPickup(first, order).state().equals("PickedUp"), "Order not picked up");
         check(couriers.view(first).status() == Courier.Status.CARRYING, "Courier not carrying");
         expect(IllegalStateException.class, () -> couriers.goOffDuty(first));
@@ -102,6 +108,7 @@ public final class CourierChecks {
         alone.goOnDuty();
         alone.assign("o");
         expect(IllegalStateException.class, () -> alone.pickUp("wrong"));
+        alone.acceptOffer("o");
         alone.pickUp("o");
         expect(IllegalStateException.class, () -> alone.deliver("wrong"));
         alone.deliver("o");

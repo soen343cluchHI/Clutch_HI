@@ -17,6 +17,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Profile checks failed" }
     & java -cp $outputPath sugarrush.CourierChecks
     if ($LASTEXITCODE -ne 0) { throw "Courier checks failed" }
+    & java -cp $outputPath sugarrush.DispatchChecks
+    if ($LASTEXITCODE -ne 0) { throw "Dispatch checks failed" }
     & java --add-modules jdk.httpserver -cp $outputPath sugarrush.presentation.http.FirebaseLoginChecks
     if ($LASTEXITCODE -ne 0) { throw "Firebase login checks failed" }
 } finally {

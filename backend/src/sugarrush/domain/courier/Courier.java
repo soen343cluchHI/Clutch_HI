@@ -12,6 +12,15 @@ public final class Courier {
     private final double x, y;
     private Status status = Status.OFFLINE;
     private String orderId;
+    private boolean offerAccepted;
+
+    public boolean offerAccepted() { return offerAccepted; }
+
+    public void acceptOffer(String orderId) {
+        if (status != Status.ASSIGNED || !Objects.equals(this.orderId, orderId) || offerAccepted)
+            throw new IllegalStateException("No pending offer for this order");
+        offerAccepted = true;
+    }
 
     public Courier(int id, String userId, double x, double y) {
         if (id <= 0 || userId == null || userId.isBlank())
@@ -68,11 +77,12 @@ public final class Courier {
         if (status != Status.IDLE)
             throw new IllegalStateException("Courier is " + status + ", not IDLE");
         this.orderId = orderId;
+        offerAccepted = false;
         status = Status.ASSIGNED;
     }
 
     public void pickUp(String orderId) {
-        if (status != Status.ASSIGNED || !Objects.equals(this.orderId, orderId))
+        if (status != Status.ASSIGNED || !Objects.equals(this.orderId, orderId) || !offerAccepted)
             throw new IllegalStateException("Cannot pick up in " + status);
         status = Status.CARRYING;
     }
@@ -81,6 +91,7 @@ public final class Courier {
         if (status != Status.CARRYING || !Objects.equals(this.orderId, orderId))
             throw new IllegalStateException("Cannot deliver in " + status);
         this.orderId = null;
+        offerAccepted = false;
         status = Status.IDLE;
     }
 }

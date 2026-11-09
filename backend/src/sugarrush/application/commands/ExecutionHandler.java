@@ -67,6 +67,8 @@ public final class ExecutionHandler extends CommandHandler {
         }
         case VIEW_PROFILE -> profiles.view(user);
         case UPDATE_PROFILE -> profiles.update(user, c.fields());
+        case COURIER_OFFER -> couriers.offer(user);
+        case ACCEPT_DELIVERY_OFFER -> couriers.acceptOffer(user, c.orderId());
         case COURIER_STATUS -> couriers.view(user);
         case GO_ON_DUTY -> couriers.goOnDuty(user);
         case GO_OFF_DUTY -> couriers.goOffDuty(user);
