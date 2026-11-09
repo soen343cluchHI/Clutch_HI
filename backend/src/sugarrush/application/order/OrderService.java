@@ -8,13 +8,30 @@ import sugarrush.application.restaurant.RestaurantService;
 import sugarrush.domain.order.*;
 import sugarrush.domain.restaurant.Restaurant;
 import sugarrush.domain.user.*;
+import java.time.Instant;
 
 public final class OrderService {
     public record View(String id, String customerId, String restaurantId, List<OrderLine> lines, BigDecimal total,
             String state, String rejectionReason) {
     }
 
+    //To define the info the summary of the order contains
+    public record Summary(
+        String orderId,
+        String restaurantId,
+        String restaurantName,
+        List<OrderLine> lines,
+        BigDecimal subtotal,
+        BigDecimal totalCharged,
+        Instant deliveredAt) {
+
+        public Summary {
+            lines = List.copyOf(lines);
+        }
+    }
+
     private final Map<String, Order> orders = new LinkedHashMap<>();
+    private final Map<String, Summary> summaries = new LinkedHashMap<>();// store the summaries
     private final RestaurantService restaurants;
     private final OrderEventPublisher publisher;
     private final PricingService pricing;
@@ -76,7 +93,18 @@ public final class OrderService {
             r.queue().complete(id);
         }
         case "CONFIRM_PICKUP" -> event = order.pickUp();
-        case "CONFIRM_DELIVERY" -> event = order.deliver();
+        case "CONFIRM_DELIVERY" -> {                        //items subtotal
+            BigDecimal totalCharged = pricing.calculate(order.total());//provides the total including the fees
+            event = order.deliver(); //Summary saved when this succeeds                       
+            summaries.put(id, new Summary(
+                    order.id(),
+                    r.id(),
+                    r.name(),
+                    order.lines(),
+                    order.total(),
+                    totalCharged,
+                    event.timestamp()));
+        }
         default -> throw new IllegalArgumentException("Unknown order action");
         }
         publisher.publish(event);
@@ -86,4 +114,18 @@ public final class OrderService {
     private View view(Order o) {
         return new View(o.id(), o.customerId(), o.restaurantId(), o.lines(), pricing.calculate(o.total()), o.state(), o.rejectionReason());
     }
+
+    public Summary summary(String orderId) {
+        require(orderId);
+
+        Summary summary = summaries.get(orderId);
+
+        if (summary == null) {
+            throw new IllegalStateException(
+                    "Summary is available only after delivery");
+        }
+
+        return summary;
+    }
+    
 }
