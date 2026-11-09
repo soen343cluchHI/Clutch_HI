@@ -11,6 +11,11 @@ public final class CourierService {
 
     private final Map<Integer, Courier> couriers = new TreeMap<>();
     private final OrderService orders;
+    private Runnable availableHandler = () -> {};
+
+    public void onAvailable(Runnable handler) {
+        availableHandler = Objects.requireNonNull(handler);
+    }
 
     public CourierService(OrderService orders) {
         this.orders = orders;
@@ -55,6 +60,7 @@ public final class CourierService {
     public View goOnDuty(User user) {
         Courier courier = require(user);
         courier.goOnDuty();
+        availableHandler.run();
         return view(courier);
     }
 
@@ -107,6 +113,7 @@ public final class CourierService {
         Courier courier = requireHandoff(user, orderId, Courier.Status.CARRYING, "PickedUp");
         OrderService.View order = orders.transition(orderId, "CONFIRM_DELIVERY", null);
         courier.deliver(orderId);
+        availableHandler.run();
         return order;
     }
 

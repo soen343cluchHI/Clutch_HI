@@ -1,11 +1,14 @@
 package sugarrush.application.dispatch;
 
+import java.util.LinkedHashSet;
+import java.util.List;
 import sugarrush.application.courier.CourierService;
 import sugarrush.application.order.OrderService;
 import sugarrush.application.restaurant.RestaurantService;
 import sugarrush.domain.courier.Courier;
 
 public final class DispatchService {
+    private final LinkedHashSet<String> waitingOrderIds = new LinkedHashSet<>();
     private final OrderService orders;
     private final CourierService couriers;
     private final RestaurantService restaurants;
@@ -32,6 +35,33 @@ public final class DispatchService {
             }
         }
         return nearest;
+    }
+
+    public void onOrderReady(String orderId) {
+        if (!orders.require(orderId).state().equals("Ready"))
+            throw new IllegalStateException("Only ready orders can enter dispatch");
+        if (!isAllocated(orderId)) waitingOrderIds.add(orderId);
+        retryWaitingOrders();
+    }
+
+    public void retryWaitingOrders() {
+        var waiting = waitingOrderIds.iterator();
+        while (waiting.hasNext()) {
+            String orderId = waiting.next();
+            if (!orders.require(orderId).state().equals("Ready") || isAllocated(orderId)) {
+                waiting.remove();
+                continue;
+            }
+            var courier = findNearestAvailableCourier(orderId);
+            if (courier == null) return;
+
+            couriers.assign(courier.id(), orderId);
+            waiting.remove();
+        }
+    }
+
+    public List<String> waitingOrders() {
+        return List.copyOf(waitingOrderIds);
     }
 
     private boolean isAllocated(String orderId) {
