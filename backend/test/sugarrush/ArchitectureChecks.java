@@ -83,7 +83,7 @@ public final class ArchitectureChecks {
                 () -> app.execute(Command.place(courier.token(), "sugar-shop", Map.of("cake", 1))));
         OrderService.View first = place(app, customer.token());
         OrderService.View second = place(app, customer.token());
-        check(first.total().equals(new BigDecimal("17.00")), "Incorrect price snapshot");
+        check(first.total().equals(new BigDecimal("21.00")), "Incorrect fare total");
         expect(SecurityException.class,
                 () -> app.execute(Command.order(other.token(), Action.ACCEPT_ORDER, first.id(), null)));
         expect(SecurityException.class,
@@ -158,7 +158,7 @@ public final class ArchitectureChecks {
                 null, null, null, null, new MenuItem("cake", "Cake", BigDecimal.ONE, MenuItem.Status.AVAILABLE))));
         app.execute(new Command(staff.token(), Action.PUT_MENU_ITEM, "sugar-shop", null, null, null, null,
                 new MenuItem("cake", "Cake", BigDecimal.ONE, MenuItem.Status.AVAILABLE)));
-        check(first.total().equals(new BigDecimal("17.00")), "Menu editing changed historical price");
+        check(first.total().equals(new BigDecimal("21.00")), "Menu editing changed historical fare");
         expect(SecurityException.class, () -> app.execute(new Command(other.token(), Action.SET_RESTAURANT_STATUS,
                 "sugar-shop", null, null, null, Restaurant.Status.PAUSED, null)));
         expect(SecurityException.class, () -> app.execute(new Command(customer.token(), Action.SET_RESTAURANT_STATUS,

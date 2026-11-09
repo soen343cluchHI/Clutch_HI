@@ -10,6 +10,7 @@ import sugarrush.application.commands.*;
 import sugarrush.application.courier.CourierService;
 import sugarrush.application.events.*;
 import sugarrush.application.order.OrderService;
+import sugarrush.application.pricing.PricingService;
 import sugarrush.application.profile.ProfileService;
 import sugarrush.application.restaurant.RestaurantService;
 import sugarrush.application.seed.SeedLoader;
@@ -23,11 +24,10 @@ public final class SugarRush {
     private final DashboardObserver dashboard = new DashboardObserver();
     private final OrderEventPublisher publisher = new OrderEventPublisher();
     private final CommandLog log = new CommandLog();
-    private final OrderService orders = new OrderService(restaurants, publisher);
+    private final OrderService orders;
     private final ProfileService profiles = new ProfileService();
-    private final CourierService couriers = new CourierService(orders);
-    private final CommandProcessor commands = new CommandProcessor(authentication, restaurants, orders, profiles,
-            couriers, events, dashboard, log);
+    private final CourierService couriers;
+    private final CommandProcessor commands;
     private final Map<String, User> firebaseAccounts = new HashMap<>();
     private final Map<String, Session> firebaseSessions = new HashMap<>();
     private final FirebaseRegistrationService firebaseRegistrations = new FirebaseRegistrationService();
@@ -54,13 +54,21 @@ public final class SugarRush {
         return user;
     }
 
-    private SugarRush() {
+    private SugarRush(PricingService pricing) {
+        orders = new OrderService(restaurants, publisher, pricing);
+        couriers = new CourierService(orders);
+        commands = new CommandProcessor(authentication, restaurants, orders, profiles,
+                couriers, events, dashboard, log);
         publisher.subscribe(events);
         publisher.subscribe(dashboard);
     }
 
     public static SugarRush fromSeed(Path path) throws IOException {
-        SugarRush app = new SugarRush();
+        Properties properties = new Properties();
+        try (Reader reader = Files.newBufferedReader(path)) {
+            properties.load(reader);
+        }
+        SugarRush app = new SugarRush(new PricingService(properties));
         new SeedLoader().load(path, app.registration, app.restaurants, app.couriers);
         if ("true".equalsIgnoreCase(System.getenv("SUGARRUSH_DEMO_PROFILES")))
             new SeedLoader().loadProfiles(Path.of("backend/config/demo-profiles.properties"), app.registration, app.profiles);
@@ -68,10 +76,6 @@ public final class SugarRush {
                 && !"true".equalsIgnoreCase(System.getenv("SUGARRUSH_REMOTE_RESTAURANTS"))) {
             app.restaurants.useStore(Path.of("backend/data/restaurants.properties"));
             app.profiles.useStore(Path.of("backend/data/profiles.properties"));
-        }
-        Properties properties = new Properties();
-        try (Reader reader = Files.newBufferedReader(path)) {
-            properties.load(reader);
         }
         for (String key : properties.stringPropertyNames()) {
             if (key.startsWith("firebase.user.") && key.endsWith(".account")) {

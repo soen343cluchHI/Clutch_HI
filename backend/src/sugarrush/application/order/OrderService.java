@@ -3,6 +3,7 @@ package sugarrush.application.order;
 import java.math.BigDecimal;
 import java.util.*;
 import sugarrush.application.events.OrderEventPublisher;
+import sugarrush.application.pricing.PricingService;
 import sugarrush.application.restaurant.RestaurantService;
 import sugarrush.domain.order.*;
 import sugarrush.domain.restaurant.Restaurant;
@@ -16,10 +17,12 @@ public final class OrderService {
     private final Map<String, Order> orders = new LinkedHashMap<>();
     private final RestaurantService restaurants;
     private final OrderEventPublisher publisher;
+    private final PricingService pricing;
 
-    public OrderService(RestaurantService restaurants, OrderEventPublisher publisher) {
+    public OrderService(RestaurantService restaurants, OrderEventPublisher publisher, PricingService pricing) {
         this.restaurants = restaurants;
         this.publisher = publisher;
+        this.pricing = pricing;
     }
 
     public View place(User user, String restaurantId, Map<String, Integer> items) {
@@ -27,6 +30,7 @@ public final class OrderService {
         List<OrderLine> lines = items.entrySet().stream().map(e -> new OrderLine(r.item(e.getKey()), e.getValue()))
                 .toList();
         Order order = new Order(UUID.randomUUID().toString(), user.id(), r, lines);
+        pricing.calculate(order.total());
         orders.put(order.id(), order);
         publisher.publish(order.placedEvent());
         return view(order);
@@ -45,7 +49,7 @@ public final class OrderService {
         case RESTAURANT -> restaurants.require(o.restaurantId()).ownerId().equals(user.id());
         case OPERATOR -> true;
         case COURIER -> false;
-        }).map(OrderService::view).toList();
+        }).map(this::view).toList();
     }
 
     public View transition(String id, String action, String reason) {
@@ -79,7 +83,7 @@ public final class OrderService {
         return view(order);
     }
 
-    private static View view(Order o) {
-        return new View(o.id(), o.customerId(), o.restaurantId(), o.lines(), o.total(), o.state(), o.rejectionReason());
+    private View view(Order o) {
+        return new View(o.id(), o.customerId(), o.restaurantId(), o.lines(), pricing.calculate(o.total()), o.state(), o.rejectionReason());
     }
 }

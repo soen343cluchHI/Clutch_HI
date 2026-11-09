@@ -9,6 +9,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Java compilation failed" }
     & java -cp $outputPath sugarrush.ArchitectureChecks
     if ($LASTEXITCODE -ne 0) { throw "Architecture checks failed" }
+    & java -cp $outputPath sugarrush.PricingChecks
+    if ($LASTEXITCODE -ne 0) { throw "Pricing checks failed" }
     & java -cp $outputPath sugarrush.RestaurantOwnershipChecks
     if ($LASTEXITCODE -ne 0) { throw "Restaurant ownership checks failed" }
     & java -cp $outputPath sugarrush.ProfileChecks

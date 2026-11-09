@@ -671,8 +671,8 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
                   <div>
                     <h2>Order history</h2>
                     <p className="dash-muted">
-                      Orders visible to your account. Amounts are item subtotals; billing fees and charges are not
-                      implemented yet.
+                      Orders visible to your account. Amounts include the configured delivery and service fees,
+                      plus a surcharge for small orders.
                     </p>
                   </div>
                   {!orders.length ? (
@@ -687,7 +687,7 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
                             <th>Order</th>
                             <th>Restaurant</th>
                             <th>State</th>
-                            <th>Item subtotal</th>
+                            <th>Fare total</th>
                           </tr>
                         </thead>
                         <tbody>
