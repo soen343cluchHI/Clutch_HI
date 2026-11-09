@@ -204,9 +204,8 @@ public final class ApiServer {
             case SET_RESTAURANT_STATUS -> new Command(token, action, required(fields, "restaurantId"), null, null, null,
                     Restaurant.Status.valueOf(required(fields, "status")), null);
             case PLACE_ORDER -> Command.place(token, required(fields, "restaurantId"), items);
-            case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY, CONFIRM_PICKUP,
-                    CONFIRM_DELIVERY ->
-                Command.order(token, action, required(fields, "orderId"), fields.get("reason"));
+            case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY, CONFIRM_PICKUP, CONFIRM_DELIVERY, VIEW_ORDER_SUMMARY -> // Dashboard can send commands to backend through APi
+                Command.order(token, action, required(fields, "orderId"), fields.get("reason"));                                            // The commands requests ertrival of summaries
             case UPDATE_PROFILE -> Command.profile(token, profile);
             case BROWSE_RESTAURANTS, LIST_ORDERS, SESSION_INFO, ROLE_MENU, LOGOUT, DASHBOARD, EVENT_LOG, COMMAND_LOG,
                     VIEW_PROFILE, COURIER_STATUS, GO_ON_DUTY, GO_OFF_DUTY ->
