@@ -81,6 +81,14 @@ public final class Courier {
         status = Status.ASSIGNED;
     }
 
+    public void release(String orderId) {
+        if (status != Status.ASSIGNED || !Objects.equals(this.orderId, orderId))
+            throw new IllegalStateException("Only an assigned order can be released");
+        this.orderId = null;
+        offerAccepted = false;
+        status = Status.IDLE;
+    }
+
     public void pickUp(String orderId) {
         if (status != Status.ASSIGNED || !Objects.equals(this.orderId, orderId) || !offerAccepted)
             throw new IllegalStateException("Cannot pick up in " + status);

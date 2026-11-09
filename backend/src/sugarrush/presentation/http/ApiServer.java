@@ -205,7 +205,7 @@ public final class ApiServer {
                     Restaurant.Status.valueOf(required(fields, "status")), null);
             case PLACE_ORDER -> Command.place(token, required(fields, "restaurantId"), items);
             case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY, ACCEPT_DELIVERY_OFFER, CONFIRM_PICKUP,
-                    CONFIRM_DELIVERY ->
+                    CONFIRM_DELIVERY, REASSIGN_ORDER ->
                 Command.order(token, action, required(fields, "orderId"), fields.get("reason"));
             case UPDATE_PROFILE -> Command.profile(token, profile);
             case BROWSE_RESTAURANTS, LIST_ORDERS, SESSION_INFO, ROLE_MENU, LOGOUT, DASHBOARD, EVENT_LOG, COMMAND_LOG,

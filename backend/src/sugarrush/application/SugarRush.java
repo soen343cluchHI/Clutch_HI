@@ -62,7 +62,7 @@ public final class SugarRush {
         orders.onReady(dispatch::onOrderReady);
         couriers.onAvailable(dispatch::retryWaitingOrders);
         commands = new CommandProcessor(authentication, restaurants, orders, profiles,
-                couriers, events, dashboard, log);
+                couriers, dispatch, events, dashboard, log);
         publisher.subscribe(events);
         publisher.subscribe(dashboard);
     }

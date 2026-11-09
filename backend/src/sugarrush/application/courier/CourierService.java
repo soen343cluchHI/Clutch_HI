@@ -80,6 +80,26 @@ public final class CourierService {
         return view(courier);
     }
 
+    public View transfer(int currentCourierId, int replacementCourierId, String orderId) {
+        Courier current = require(currentCourierId);
+        Courier replacement = require(replacementCourierId);
+        if (!orders.require(orderId).state().equals("Ready"))
+            throw new IllegalStateException("Only ready orders can be reassigned");
+        if (current.status() != Courier.Status.ASSIGNED || !Objects.equals(current.orderId(), orderId))
+            throw new IllegalStateException("Current courier does not hold this offer");
+        if (currentCourierId == replacementCourierId || replacement.status() != Courier.Status.IDLE
+                || replacement.orderId() != null)
+            throw new IllegalStateException("Replacement courier must be different and idle");
+        if (couriers.values().stream().anyMatch(c -> c.id() != currentCourierId && orderId.equals(c.orderId())))
+            throw new IllegalStateException("Order has another courier");
+
+        current.release(orderId);
+        View assigned = assign(replacementCourierId, orderId);
+
+        availableHandler.run();
+        return assigned;
+    }
+
     public OrderService.View offer(User user) {
         String id = require(user).orderId();
         return id == null ? null : orders.view(orders.require(id));
