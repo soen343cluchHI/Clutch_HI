@@ -9,6 +9,8 @@ import sugarrush.domain.order.*;
 import sugarrush.domain.restaurant.Restaurant;
 import sugarrush.domain.user.*;
 import java.time.Instant;
+import sugarrush.application.billing.LedgerService;
+import sugarrush.domain.billing.LedgerEntry;
 
 public final class OrderService {
     public record View(String id, String customerId, String restaurantId, List<OrderLine> lines, BigDecimal total,
@@ -32,6 +34,7 @@ public final class OrderService {
 
     private final Map<String, Order> orders = new LinkedHashMap<>();
     private final Map<String, Summary> summaries = new LinkedHashMap<>();// store the summaries
+    private final LedgerService ledger = new LedgerService(); //order service needs a ledger instance to record order activity
     private final RestaurantService restaurants;
     private final OrderEventPublisher publisher;
     private final PricingService pricing;
@@ -49,7 +52,9 @@ public final class OrderService {
         Order order = new Order(UUID.randomUUID().toString(), user.id(), r, lines);
         pricing.calculate(order.total());
         orders.put(order.id(), order);
-        publisher.publish(order.placedEvent());
+        OrderEvent event = order.placedEvent(); //every order gets a ledger entry when placed
+        ledger.record(order, event, BigDecimal.ZERO.setScale(2)); //reuse the same event and timestamp as the existing event logger
+        publisher.publish(event);
         return view(order);
     }
 
@@ -107,8 +112,16 @@ public final class OrderService {
         }
         default -> throw new IllegalArgumentException("Unknown order action");
         }
+        BigDecimal charged = "Delivered".equals(event.newState()) //every successful transition is recorded
+                ? summary(id).totalCharged()
+                : BigDecimal.ZERO.setScale(2);
+        ledger.record(order, event, charged);
         publisher.publish(event);
         return view(order);
+    }
+
+    public List<LedgerEntry> ledgerEntries() {
+        return ledger.all();
     }
 
     private View view(Order o) {
