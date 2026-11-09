@@ -6,11 +6,16 @@ import sugarrush.domain.courier.Courier;
 import sugarrush.domain.user.*;
 
 public final class CourierService {
-    public record View(int id, String userId, double x, double y, Courier.Status status, String orderId) {
+    public record View(int id, String userId, double x, double y, Courier.Status status, String orderId, boolean offerAccepted) {
     }
 
     private final Map<Integer, Courier> couriers = new TreeMap<>();
     private final OrderService orders;
+    private Runnable availableHandler = () -> {};
+
+    public void onAvailable(Runnable handler) {
+        availableHandler = Objects.requireNonNull(handler);
+    }
 
     public CourierService(OrderService orders) {
         this.orders = orders;
@@ -39,6 +44,7 @@ public final class CourierService {
     }
 
     public Courier require(User user) {
+        if (user.role() != Role.COURIER) throw new SecurityException("Courier account required");
         return couriers.values().stream().filter(c -> c.userId().equals(user.id())).findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("No courier for this account"));
     }
@@ -54,6 +60,7 @@ public final class CourierService {
     public View goOnDuty(User user) {
         Courier courier = require(user);
         courier.goOnDuty();
+        availableHandler.run();
         return view(courier);
     }
 
@@ -73,21 +80,64 @@ public final class CourierService {
         return view(courier);
     }
 
-    public OrderService.View confirmPickup(User user, String orderId) {
+    public View transfer(int currentCourierId, int replacementCourierId, String orderId) {
+        Courier current = require(currentCourierId);
+        Courier replacement = require(replacementCourierId);
+        if (!orders.require(orderId).state().equals("Ready"))
+            throw new IllegalStateException("Only ready orders can be reassigned");
+        if (current.status() != Courier.Status.ASSIGNED || !Objects.equals(current.orderId(), orderId))
+            throw new IllegalStateException("Current courier does not hold this offer");
+        if (currentCourierId == replacementCourierId || replacement.status() != Courier.Status.IDLE
+                || replacement.orderId() != null)
+            throw new IllegalStateException("Replacement courier must be different and idle");
+        if (couriers.values().stream().anyMatch(c -> c.id() != currentCourierId && orderId.equals(c.orderId())))
+            throw new IllegalStateException("Order has another courier");
+
+        current.release(orderId);
+        View assigned = assign(replacementCourierId, orderId);
+
+        availableHandler.run();
+        return assigned;
+    }
+
+    public OrderService.View offer(User user) {
+        String id = require(user).orderId();
+        return id == null ? null : orders.view(orders.require(id));
+    }
+
+    public View acceptOffer(User user, String orderId) {
+        Courier courier = requireHandoff(user, orderId, Courier.Status.ASSIGNED, "Ready");
+        courier.acceptOffer(orderId);
+        return view(courier);
+    }
+
+    private Courier requireHandoff(User user, String orderId, Courier.Status status, String orderState) {
         Courier courier = require(user);
+        var order = orders.require(orderId);
+        if (!Objects.equals(courier.orderId(), orderId))
+            throw new SecurityException("Only the assigned courier can handle this order");
+        if (courier.status() != status || !order.state().equals(orderState))
+            throw new IllegalStateException("Invalid handoff state");
+        return courier;
+    }
+
+    public OrderService.View confirmPickup(User user, String orderId) {
+        Courier courier = requireHandoff(user, orderId, Courier.Status.ASSIGNED, "Ready");
+        if (!courier.offerAccepted()) throw new IllegalStateException("Accept the offer before pickup");
         OrderService.View order = orders.transition(orderId, "CONFIRM_PICKUP", null);
         courier.pickUp(orderId);
         return order;
     }
 
     public OrderService.View confirmDelivery(User user, String orderId) {
-        Courier courier = require(user);
+        Courier courier = requireHandoff(user, orderId, Courier.Status.CARRYING, "PickedUp");
         OrderService.View order = orders.transition(orderId, "CONFIRM_DELIVERY", null);
         courier.deliver(orderId);
+        availableHandler.run();
         return order;
     }
 
     private static View view(Courier c) {
-        return new View(c.id(), c.userId(), c.x(), c.y(), c.status(), c.orderId());
+        return new View(c.id(), c.userId(), c.x(), c.y(), c.status(), c.orderId(), c.offerAccepted());
     }
 }

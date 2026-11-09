@@ -38,6 +38,11 @@ public final class OrderService {
     private final RestaurantService restaurants;
     private final OrderEventPublisher publisher;
     private final PricingService pricing;
+    private java.util.function.Consumer<String> readyHandler = id -> {};
+
+    public void onReady(java.util.function.Consumer<String> handler) {
+        readyHandler = Objects.requireNonNull(handler);
+    }
 
     public OrderService(RestaurantService restaurants, OrderEventPublisher publisher, PricingService pricing) {
         this.restaurants = restaurants;
@@ -117,6 +122,7 @@ public final class OrderService {
                 : BigDecimal.ZERO.setScale(2);
         ledger.record(order, event, charged);
         publisher.publish(event);
+        if (action.equals("MARK_READY")) readyHandler.accept(id);
         return view(order);
     }
 
