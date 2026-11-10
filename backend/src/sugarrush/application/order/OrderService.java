@@ -32,6 +32,7 @@ public final class OrderService {
         }
     }
 
+    private final Map<String, Set<String>> carriersByOrder = new HashMap<>(); //remembers which courier carried an order
     private final Map<String, Order> orders = new LinkedHashMap<>();
     private final Map<String, Summary> summaries = new LinkedHashMap<>();// store the summaries
     private final LedgerService ledger = new LedgerService(); //order service needs a ledger instance to record order activity
@@ -70,19 +71,56 @@ public final class OrderService {
         return order;
     }
 
+    //remembers a courier after pickup
+    public void recordCarrier(String orderId, User courier) {
+        Order order = require(orderId);
+
+        if (courier.role() != Role.COURIER) {
+            throw new SecurityException("Courier account required");
+        }
+
+        if (!"PickedUp".equals(order.state())) {
+            throw new IllegalStateException(
+                    "Record a carrier only after pickup");
+        }
+
+        carriersByOrder
+                .computeIfAbsent(orderId, ignored -> new HashSet<>())
+                .add(courier.id());
+    }
+
+    //defines the four role-access rules
+    private boolean canView(User user, Order order) {
+        return switch (user.role()) {
+            case CUSTOMER ->
+                order.customerId().equals(user.id());
+
+            case RESTAURANT ->
+                restaurants.require(order.restaurantId())
+                        .ownerId().equals(user.id());
+
+            case COURIER ->
+                carriersByOrder
+                        .getOrDefault(order.id(), Set.of())
+                        .contains(user.id());
+
+            case OPERATOR -> true;
+        };
+    }
+
+    //applies those rules to the order list
     public List<View> visible(User user) {
-        return orders.values().stream().filter(o -> switch (user.role()) {
-        case CUSTOMER -> o.customerId().equals(user.id());
-        case RESTAURANT -> restaurants.require(o.restaurantId()).ownerId().equals(user.id());
-        case OPERATOR -> true;
-        case COURIER -> false;
-        }).map(this::view).toList();
+        return orders.values().stream()
+                .filter(order -> canView(user, order))
+                .map(this::view)
+                .toList();
     }
 
     public View transition(String id, String action, String reason) {
         Order order = require(id);
         Restaurant r = restaurants.require(order.restaurantId());
         OrderEvent event;
+        BigDecimal refundAmount = BigDecimal.ZERO.setScale(2);
         switch (action) {
         case "CANCEL_ORDER" -> {
             event = order.cancel();
@@ -102,6 +140,10 @@ public final class OrderService {
             event = order.ready();
             r.queue().complete(id);
         }
+        case "REFUND_ORDER" -> {
+            refundAmount = ledger.refundableAmount(id);
+            event = order.refund();
+        }
         case "CONFIRM_PICKUP" -> event = order.pickUp();
         case "CONFIRM_DELIVERY" -> {                        //items subtotal
             BigDecimal totalCharged = pricing.calculate(order.total());//provides the total including the fees
@@ -116,18 +158,23 @@ public final class OrderService {
                     event.timestamp()));
         }
         default -> throw new IllegalArgumentException("Unknown order action");
-        }
-        BigDecimal charged = "Delivered".equals(event.newState()) //every successful transition is recorded
-                ? summary(id).totalCharged()
-                : BigDecimal.ZERO.setScale(2);
+        }//every successful transition is recorded
+        BigDecimal charged = switch (event.newState()) {
+            case "Delivered" -> summary(id).totalCharged();
+            case "Refunded" -> refundAmount;
+            default -> BigDecimal.ZERO.setScale(2);
+        };
         ledger.record(order, event, charged);
         publisher.publish(event);
         if (action.equals("MARK_READY")) readyHandler.accept(id);
         return view(order);
     }
 
-        public List<LedgerEntry> ledgerEntries() {
-        return ledger.all();
+    //ledger now uses the same role filters as the order list
+    public List<LedgerEntry> ledgerEntries(User user) {
+        return ledger.all().stream()
+                .filter(entry -> canView(user, require(entry.orderId())))
+                .toList();
     }
 
     public View view(Order o) {

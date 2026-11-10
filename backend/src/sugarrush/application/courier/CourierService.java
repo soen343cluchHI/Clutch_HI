@@ -122,10 +122,16 @@ public final class CourierService {
     }
 
     public OrderService.View confirmPickup(User user, String orderId) {
-        Courier courier = requireHandoff(user, orderId, Courier.Status.ASSIGNED, "Ready");
-        if (!courier.offerAccepted()) throw new IllegalStateException("Accept the offer before pickup");
+        Courier courier = requireHandoff(
+                user, orderId, Courier.Status.ASSIGNED, "Ready");
+
+        if (!courier.offerAccepted()) { 
+            throw new IllegalStateException("Accept the offer before pickup");
+        }
+
         OrderService.View order = orders.transition(orderId, "CONFIRM_PICKUP", null);
         courier.pickUp(orderId);
+        orders.recordCarrier(orderId, user);
         return order;
     }
 

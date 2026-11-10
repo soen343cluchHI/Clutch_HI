@@ -50,7 +50,8 @@ public final class ExecutionHandler extends CommandHandler {
         case LIST_ORDERS -> orders.visible(user);
         case VIEW_ORDER_SUMMARY -> orders.summary(c.orderId());// connects your new command to the summary retrieval method
         case PLACE_ORDER -> orders.place(user, c.restaurantId(), c.items()); // handles the retrival of summary
-        case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY ->
+        case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER,
+                START_PREPARING, MARK_READY, REFUND_ORDER ->
             orders.transition(c.orderId(), c.action().name(), c.reason());
         case RESTAURANT_QUEUE -> restaurants.require(c.restaurantId()).queue().snapshot();
         case SET_RESTAURANT_STATUS -> {
@@ -82,7 +83,7 @@ public final class ExecutionHandler extends CommandHandler {
         case DASHBOARD -> dashboard.snapshot();
         case EVENT_LOG -> events.all();
         case COMMAND_LOG -> log.all();
-        case LIST_LEDGER -> orders.ledgerEntries();
+        case LIST_LEDGER -> orders.ledgerEntries(user);
         };
     }
 }

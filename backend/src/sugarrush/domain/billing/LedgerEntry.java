@@ -20,6 +20,7 @@ public record LedgerEntry(//This defines one ledger row
     public enum Type {
         ORDER_STATE,
         CHARGE,
-        NO_CHARGE
+        NO_CHARGE,
+        REFUND
     }
 }
