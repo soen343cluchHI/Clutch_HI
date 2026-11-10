@@ -7,7 +7,7 @@ public enum Action {
     SESSION_INFO, LOGOUT, ROLE_MENU, BROWSE_RESTAURANTS, LIST_ORDERS, PLACE_ORDER, CANCEL_ORDER, RESTAURANT_QUEUE,
     ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY, SET_RESTAURANT_STATUS, PUT_MENU_ITEM, DASHBOARD, EVENT_LOG,
     COMMAND_LOG, CREATE_RESTAURANT, DELETE_MENU_ITEM, VIEW_PROFILE, UPDATE_PROFILE, COURIER_STATUS, GO_ON_DUTY,
-    GO_OFF_DUTY, ACCEPT_DELIVERY_OFFER, COURIER_OFFER, CONFIRM_PICKUP, CONFIRM_DELIVERY, REASSIGN_ORDER, VIEW_ORDER_SUMMARY, LIST_LEDGER;
+    GO_OFF_DUTY, ACCEPT_DELIVERY_OFFER, COURIER_OFFER, CONFIRM_PICKUP, CONFIRM_DELIVERY, REASSIGN_ORDER, VIEW_ORDER_SUMMARY, LIST_LEDGER, REFUND_ORDER;
     
     // all roles can request their filtered order and ledger history
     public boolean permits(Role role) { //true here does not permit guests, the authentication handler still requires a valid session
@@ -28,8 +28,8 @@ public enum Action {
                 role == Role.RESTAURANT;
             case SET_RESTAURANT_STATUS ->
                 role == Role.RESTAURANT || role == Role.OPERATOR;
-            case DASHBOARD, EVENT_LOG, COMMAND_LOG,
-                    REASSIGN_ORDER -> role == Role.OPERATOR; //only operators should receive the complete ledger
+            case DASHBOARD, EVENT_LOG, COMMAND_LOG, REASSIGN_ORDER, REFUND_ORDER ->
+                role == Role.OPERATOR; //only operators should receive the complete ledger
             case COURIER_STATUS, GO_ON_DUTY, GO_OFF_DUTY,
                     ACCEPT_DELIVERY_OFFER, COURIER_OFFER,
                     CONFIRM_PICKUP, CONFIRM_DELIVERY ->

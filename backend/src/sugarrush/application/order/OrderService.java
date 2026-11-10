@@ -120,6 +120,7 @@ public final class OrderService {
         Order order = require(id);
         Restaurant r = restaurants.require(order.restaurantId());
         OrderEvent event;
+        BigDecimal refundAmount = BigDecimal.ZERO.setScale(2);
         switch (action) {
         case "CANCEL_ORDER" -> {
             event = order.cancel();
@@ -139,6 +140,10 @@ public final class OrderService {
             event = order.ready();
             r.queue().complete(id);
         }
+        case "REFUND_ORDER" -> {
+            refundAmount = ledger.refundableAmount(id);
+            event = order.refund();
+        }
         case "CONFIRM_PICKUP" -> event = order.pickUp();
         case "CONFIRM_DELIVERY" -> {                        //items subtotal
             BigDecimal totalCharged = pricing.calculate(order.total());//provides the total including the fees
@@ -153,10 +158,12 @@ public final class OrderService {
                     event.timestamp()));
         }
         default -> throw new IllegalArgumentException("Unknown order action");
-        }
-        BigDecimal charged = "Delivered".equals(event.newState()) //every successful transition is recorded
-                ? summary(id).totalCharged()
-                : BigDecimal.ZERO.setScale(2);
+        }//every successful transition is recorded
+        BigDecimal charged = switch (event.newState()) {
+            case "Delivered" -> summary(id).totalCharged();
+            case "Refunded" -> refundAmount;
+            default -> BigDecimal.ZERO.setScale(2);
+        };
         ledger.record(order, event, charged);
         publisher.publish(event);
         if (action.equals("MARK_READY")) readyHandler.accept(id);
