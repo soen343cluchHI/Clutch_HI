@@ -44,17 +44,21 @@ public final class LedgerService {
 
         LedgerEntry.Type type = switch (event.newState()) {
             case "Delivered" -> LedgerEntry.Type.CHARGE;
+            case "Refunded" -> LedgerEntry.Type.REFUND;
             case "Cancelled", "Rejected" -> LedgerEntry.Type.NO_CHARGE;
             default -> LedgerEntry.Type.ORDER_STATE;
         };
 
         Objects.requireNonNull(totalCharged);
 
-        if (totalCharged.signum() < 0
-                || (type != LedgerEntry.Type.CHARGE
-                    && totalCharged.signum() != 0)) {
-            throw new IllegalArgumentException(
-                    "Invalid charge for order state");
+        boolean financialEntry = type == LedgerEntry.Type.CHARGE || type == LedgerEntry.Type.REFUND;
+
+        if (totalCharged.signum() < 0 || (!financialEntry && totalCharged.signum() != 0)) {
+            throw new IllegalArgumentException("Invalid charge for order state");
+}
+
+        if (type == LedgerEntry.Type.REFUND && totalCharged.compareTo(refundableAmount(order.id())) != 0) {
+            throw new IllegalArgumentException("Refund must match the original charge");
         }
 
         LedgerEntry entry = new LedgerEntry(
@@ -71,6 +75,24 @@ public final class LedgerService {
 
         placedAt.putIfAbsent(order.id(), created);
         entries.put(event.eventId(), entry);
+    }
+
+    public BigDecimal refundableAmount(String orderId) {
+        boolean refunded = entries.values().stream().anyMatch(entry ->
+                        entry.orderId().equals(orderId)
+                        && entry.type() == LedgerEntry.Type.REFUND);
+
+        if (refunded) {
+            throw new IllegalStateException("Order has already been refunded");
+        }
+
+        return entries.values().stream()
+                .filter(entry ->
+                        entry.orderId().equals(orderId)
+                        && entry.type() == LedgerEntry.Type.CHARGE)
+                .map(LedgerEntry::totalCharged)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("No delivered charge is available to refund"));
     }
 
     public List<LedgerEntry> all() {
