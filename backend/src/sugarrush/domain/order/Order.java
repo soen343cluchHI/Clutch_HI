@@ -90,6 +90,10 @@ public final class Order {
         return transition(state.deliver());
     }
 
+    public OrderEvent refund() {
+        return transition(state.refund());
+}
+
     private OrderEvent transition(OrderState next) {
         OrderEvent event = new OrderEvent(UUID.randomUUID(), id, state(), next.name(), Instant.now());
         state = next;

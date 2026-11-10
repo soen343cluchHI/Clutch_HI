@@ -31,6 +31,10 @@ public interface OrderState {
         throw invalid("deliver");
     }
 
+    default OrderState refund() {
+        throw invalid("refund");// Refunds are rejected by default
+    }
+
     default IllegalStateException invalid(String action) {
         return new IllegalStateException("Cannot " + action + " in " + name());
     }
