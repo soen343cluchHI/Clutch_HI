@@ -133,9 +133,8 @@ async function start() {
   const configuredUrl = (contents) => contents.match(/^VITE_FIREBASE_DATABASE_URL=(.*)$/m)?.[1]?.trim()?.replace(/^['"]|['"]$/g, '');
   const databaseUrl = process.env.VITE_FIREBASE_DATABASE_URL || configuredUrl(localEnv) || configuredUrl(productionEnv);
   if (!databaseUrl) throw new Error('Set VITE_FIREBASE_DATABASE_URL in ui/.env.local or ui/.env.production.');
-  const seed = process.env.SUGARRUSH_SEED || 'backend/config/demo.properties';
-  const remoteRestaurants = process.env.SUGARRUSH_REMOTE_RESTAURANTS || (seed.endsWith('demo.properties') ? 'false' : 'true');
-  const demoProfiles = process.env.SUGARRUSH_DEMO_PROFILES || (seed.endsWith('demo.properties') ? 'true' : 'false');
+  // Settings only; restaurants and accounts always come from the Firebase Realtime Database.
+  const config = 'backend/config/app.properties';
   const backend = spawnOwned(java, [
     '-Djava.net.preferIPv4Stack=true', // Match freePort() and the Vite proxy's IPv4 loopback address.
     '--add-modules',
@@ -143,10 +142,9 @@ async function start() {
     '-cp',
     output,
     'sugarrush.presentation.http.ApiServer',
-    seed,
+    config,
     String(port),
-  ], { env: { ...process.env, SUGARRUSH_BIND_HOST: '127.0.0.1', SUGARRUSH_DATABASE_URL: databaseUrl,
-    SUGARRUSH_REMOTE_RESTAURANTS: remoteRestaurants, SUGARRUSH_DEMO_PROFILES: demoProfiles } });
+  ], { env: { ...process.env, SUGARRUSH_BIND_HOST: '127.0.0.1', SUGARRUSH_DATABASE_URL: databaseUrl } });
   backend.once('error', (error) => {
     console.error(error.message);
     shutdown(1);

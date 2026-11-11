@@ -1,0 +1,176 @@
+@startuml SugarRush_Package_Diagram
+title SugarRush – Package Diagram (Phase II)
+
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam packageStyle folder
+skinparam ArrowColor #444444
+skinparam package {
+  BackgroundColor #FFFFFF
+  BorderColor #666666
+}
+skinparam frame {
+  BorderColor #222222
+  FontSize 15
+}
+skinparam rectangle {
+  RoundCorner 8
+}
+skinparam rectangle<<REG>> {
+  BackgroundColor #CFE2FF
+  BorderColor #2F5FA7
+}
+skinparam rectangle<<ORD>> {
+  BackgroundColor #FFE0B2
+  BorderColor #D9822B
+}
+skinparam rectangle<<DASH>> {
+  BackgroundColor #D4EDDA
+  BorderColor #2E8B57
+}
+skinparam rectangle<<SHARED>> {
+  BackgroundColor #EEEEEE
+  BorderColor #888888
+}
+
+' ===================== UI LAYER =====================
+frame "UI Layer  (ui/src  +  backend/src/sugarrush/presentation)" as UIL {
+  package "ui/src" as uiRoot {
+    rectangle "main.jsx\nfirebase.js\n(sign-up, login, logout,\nemail verification)" as mainJs <<REG>>
+  }
+  package "ui/src/pages" as uiPages {
+    rectangle "AuthPage\nVerifyEmailPage" as authPages <<REG>>
+    rectangle "DashboardPage\n(session bar, role tabs,\nrestaurant order panel,\nmenu editor, output console)" as dashPage <<DASH>>
+  }
+  package "ui/src/components" as uiComponents {
+    rectangle "CustomerView\nRestaurantCover\n(menu browser, order form)" as customerView <<ORD>>
+    rectangle "ProfilePanel\nAuthLayout, Field, FormAlert" as profilePanel <<REG>>
+    rectangle "SimulatorMap\n(city map, queue bands)" as simMap <<DASH>>
+  }
+  package "ui/src/services" as uiServices {
+    rectangle "dashboardApi\ndashboardWorkspace" as dashApi <<DASH>>
+  }
+  package "presentation.http" as http {
+    rectangle "ApiServer\n(/api/register-account,\n/api/firebase-session,\n/api/command)" as apiServer <<DASH>>
+  }
+}
+
+' ===================== APPLICATION LAYER =====================
+frame "Application Layer  (backend/src/sugarrush/application)" as APPL {
+  package "application" as appRoot {
+    rectangle "SugarRush\n(facade / wiring)" as sugarRush <<SHARED>>
+  }
+  package "application.auth" as appAuth {
+    rectangle "AuthenticationService\nRegistrationService\nFirebaseRegistrationService" as authSvc <<REG>>
+  }
+  package "application.profile" as appProfile {
+    rectangle "ProfileService" as profileSvc <<REG>>
+  }
+  package "application.seed" as appSeed {
+    rectangle "SeedLoader" as seedLoader <<REG>>
+  }
+  package "application.commands" as appCommands {
+    rectangle "CommandProcessor\nCommand, Action" as cmdProc <<DASH>>
+    rectangle "AuthenticationHandler" as authHandler <<REG>>
+    rectangle "AuthorizationHandler" as authzHandler <<ORD>>
+    rectangle "ExecutionHandler" as execHandler <<SHARED>>
+    rectangle "CommandLog" as cmdLog <<DASH>>
+  }
+  package "application.restaurant" as appRestaurant {
+    rectangle "RestaurantService" as restSvc <<ORD>>
+  }
+  package "application.order" as appOrder {
+    rectangle "OrderService" as orderSvc <<ORD>>
+  }
+  package "application.events" as appEvents {
+    rectangle "OrderEventPublisher\nOrderObserver\nEventLogger" as publisher <<ORD>>
+    rectangle "DashboardObserver" as dashObserver <<DASH>>
+  }
+}
+
+' ===================== DOMAIN LAYER =====================
+frame "Domain Layer  (backend/src/sugarrush/domain)" as DOML {
+  package "domain.user" as domUser {
+    rectangle "User, Role,\nSession, Profile" as userObjs <<REG>>
+  }
+  package "domain.restaurant" as domRestaurant {
+    rectangle "Restaurant, MenuItem,\nPreparationQueue" as restObjs <<ORD>>
+  }
+  package "domain.order" as domOrder {
+    rectangle "Order, OrderLine,\nOrderEvent" as orderObjs <<ORD>>
+    rectangle "OrderState + Placed, Accepted,\nPreparing, Ready, PickedUp,\nDelivered, Rejected, Cancelled" as states <<ORD>>
+  }
+}
+
+' ===================== TECHNICAL SERVICES =====================
+frame "Technical Services Layer  (backend/src/sugarrush/infrastructure, backend/config)" as TSL {
+  package "infrastructure.auth" as infAuth {
+    rectangle "FirebaseTokenVerifier" as verifier <<REG>>
+  }
+  package "infrastructure.json" as infJson {
+    rectangle "Json" as json <<SHARED>>
+  }
+  package "backend/config" as config {
+    rectangle "demo.properties\nlive.properties\n(seed file)" as seedFile <<SHARED>>
+  }
+  cloud "Firebase\n(Auth + Realtime DB)" as firebase #EEEEEE
+}
+
+' Keep the layers stacked top to bottom
+UIL -[hidden]down- APPL
+APPL -[hidden]down- DOML
+DOML -[hidden]down- TSL
+
+' ---------- UI layer dependencies ----------
+uiRoot ..> uiPages
+uiRoot ..> uiServices
+uiPages ..> uiComponents
+uiPages ..> uiServices
+uiServices ..> http : HTTPS POST\n(Firebase ID token)
+uiRoot ..> firebase : sign-in / sign-up
+
+http ..> appRoot : opens session
+http ..> appCommands : every command
+http ..> infAuth : verify token
+http ..> DOML : builds Command values\n(MenuItem, Restaurant.Status, Role)
+
+' ---------- Application layer dependencies ----------
+appRoot ..> appCommands : wires services
+appRoot ..> appSeed : load at start-up
+appCommands ..> appAuth
+appCommands ..> appProfile
+appCommands ..> appRestaurant
+appCommands ..> appOrder
+appCommands ..> appEvents
+appOrder ..> appRestaurant
+appOrder ..> appEvents : publish OrderEvent
+appSeed ..> appAuth
+appSeed ..> appRestaurant
+appSeed ..> config
+
+' ---------- Application -> Domain (each service to the domain package it manages) ----------
+appAuth ..> domUser
+appProfile ..> domUser
+appRestaurant ..> domRestaurant
+appOrder ..> domOrder
+appEvents ..> domOrder
+
+' ---------- Domain layer dependencies ----------
+domOrder ..> domRestaurant : OrderLine -> MenuItem\nOrder -> Restaurant
+
+' ---------- Technical services dependencies ----------
+infAuth ..> infJson
+infAuth ..> firebase : Google public keys
+
+legend right
+  <b>Module colours</b>
+  |<#CFE2FF> REG |  Registration, Login & Profiles |
+  |<#FFE0B2> ORD |  Order & Restaurant Core |
+  |<#D4EDDA> DASH |  Dashboard surface |
+  |<#EEEEEE> shared |  Cross-cutting / external |
+  Dashed arrow = depends on (import or call)
+  Arrows from application.commands, application.seed
+  and SugarRush to domain.* are omitted for readability
+endlegend
+
+@enduml

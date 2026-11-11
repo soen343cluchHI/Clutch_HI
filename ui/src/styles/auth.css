@@ -380,3 +380,11 @@
     }
   }
 }
+
+/* Local-only demo sign-in buttons (npm run dev). */
+.demo-login { display: grid; gap: 10px; padding-top: 16px; border-top: 1px dashed var(--border-strong); }
+.demo-login p { margin: 0; font-size: 13px; }
+.demo-login code { font-size: 12px; }
+.demo-login-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.demo-login-grid .btn { min-height: 40px; padding: 0 10px; font-size: 13px; }
+.demo-login-hint { opacity: 0.8; }

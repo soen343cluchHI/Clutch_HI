@@ -54,10 +54,8 @@ public final class FirebaseLoginChecks {
             checks++;
         }
 
-        Path seed = Files.createTempFile("firebase-login-checks", ".properties");
-        Files.writeString(seed, Files.readString(Path.of("backend/config/demo.properties"))
-                + "\nfirebase.user.staff-a.account=restaurant\nfirebase.user.staff-b.account=restaurant2\nfirebase.user.admin-a.account=operator\n");
-        var server = new ApiServer(SugarRush.fromSeed(seed), verifier).start(0);
+        var world = sugarrush.TestWorld.create("fixture-customer", "staff-a", "staff-b", "fixture-courier", "admin-a");
+        var server = new ApiServer(world.app, verifier).start(0);
         String base = "http://127.0.0.1:" + server.getAddress().getPort();
         try {
             Response missing = request(base, "/api/firebase-session", null, Map.of());
@@ -67,6 +65,11 @@ public final class FirebaseLoginChecks {
             check(request(base, "/api/login", null,
                     Map.of("username", "customer", "password", "customer-demo")).status == 404,
                     "Manual HTTP login still exposed");
+            check(request(base, "/api/demo-login", null,
+                    Map.of("username", "courier", "password", "courier-demo")).status == 404,
+                    "Seed demo login still exposed");
+            check(raw(base, "/api/command", "Demo anything", Map.of("action", "BROWSE_RESTAURANTS")).status == 401,
+                    "Non-Firebase session header accepted");
             Response identity = request(base, "/api/firebase-session", customer,
                     Map.of("role", "OPERATOR", "username", "operator"));
             check(identity.status == 200, "Automatic Firebase session failed");
@@ -208,11 +211,31 @@ public final class FirebaseLoginChecks {
             check(command(base, customer, "LOGOUT", Map.of()).status == 200, "Internal logout failed");
             check(command(base, renewed, "LIST_ORDERS", Map.of()).array().size() == 1,
                     "Firebase re-login lost order ownership");
+            resetKeepsAccounts(base);
             System.out.println("Passed " + checks + " Firebase identity, cryptographic and HTTP checks.");
         } finally {
             server.stop(0);
-            Files.deleteIfExists(seed);
         }
+    }
+
+    // Reset deletes every restaurant but keeps accounts; signing up again must not bring a restaurant back.
+    private static void resetKeepsAccounts(String base) throws Exception {
+        String owner = token("owner-new", "owner@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60);
+        String admin = token("admin-a", "admin@example.com", PROJECT, NOW + 3600, NOW - 30, NOW - 60);
+        Map<String, String> signup = Map.of("role", "RESTAURANT", "restaurantName", "Fresh Bakery");
+        check(request(base, "/api/register-account", owner, signup).status == 200, "Restaurant sign-up failed");
+        List<?> mine = command(base, owner, "BROWSE_RESTAURANTS", Map.of()).array();
+        check(mine.size() == 1 && ((Map<?, ?>) mine.get(0)).get("name").equals("Fresh Bakery"),
+                "Sign-up restaurant not created");
+        check(command(base, admin, "RESET_SYSTEM", Map.of()).status == 200, "Operator reset failed");
+        check(command(base, admin, "BROWSE_RESTAURANTS", Map.of()).array().isEmpty(), "Reset kept restaurants");
+        check(request(base, "/api/register-account", owner, signup).status == 200, "Reset removed the restaurant account");
+        check(command(base, owner, "BROWSE_RESTAURANTS", Map.of()).array().isEmpty(),
+                "Signing in again recreated a deleted restaurant");
+        check(request(base, "/api/firebase-session", owner, Map.of()).object().get("role").equals("RESTAURANT"),
+                "Reset changed the account role");
+        check(command(base, owner, "CREATE_RESTAURANT", Map.of("name", "Fresh Bakery")).status == 200,
+                "Restaurant account cannot open a restaurant after reset");
     }
 
     private record Response(int status, String body) {
@@ -242,13 +265,18 @@ public final class FirebaseLoginChecks {
 
     private static Response request(String base, String path, String token, Map<String, String> fields)
             throws Exception {
+        return raw(base, path, token == null ? null : "Bearer " + token, fields);
+    }
+
+    private static Response raw(String base, String path, String authorization, Map<String, String> fields)
+            throws Exception {
         StringJoiner form = new StringJoiner("&");
         fields.forEach((key, value) -> form.add(URLEncoder.encode(key, StandardCharsets.UTF_8) + "="
                 + URLEncoder.encode(value, StandardCharsets.UTF_8)));
         var builder = HttpRequest.newBuilder(URI.create(base + path)).header("Content-Type",
                 "application/x-www-form-urlencoded");
-        if (token != null)
-            builder.header("Authorization", "Bearer " + token);
+        if (authorization != null)
+            builder.header("Authorization", authorization);
         var response = HttpClient.newHttpClient().send(
                 builder.POST(HttpRequest.BodyPublishers.ofString(form.toString())).build(),
                 HttpResponse.BodyHandlers.ofString());

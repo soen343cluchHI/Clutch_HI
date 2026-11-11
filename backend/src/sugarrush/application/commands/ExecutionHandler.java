@@ -74,6 +74,13 @@ public final class ExecutionHandler extends CommandHandler {
             restaurants.putItem(c.restaurantId(), c.menuItem());
             yield "Menu updated";
         }
+        case SET_RESTAURANT_LOCATION -> {
+            DeliveryAddress location = deliveryAddress(c.fields());
+            if (location == null)
+                throw new IllegalArgumentException("Restaurant address required");
+            restaurants.relocate(c.restaurantId(), location.label(), location.x(), location.y());
+            yield "Restaurant moved to " + location.label();
+        }
         case DELETE_MENU_ITEM -> {
             restaurants.deleteItem(c.restaurantId(), c.reason());
             yield "Menu item deleted";

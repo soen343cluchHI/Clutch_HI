@@ -221,6 +221,7 @@ export default function CustomerView({ tab, setTab, session, restaurants, orders
                   </span>
                 </div>
                 <strong>{r.name}</strong>
+                {r.address && <span className="address-line">{r.address}</span>}
                 <span className="muted">
                   {r.status === 'OPEN' ? bandLabels[band] : 'Not taking orders'} · {r.menu.length} item{r.menu.length === 1 ? '' : 's'}
                 </span>
@@ -252,6 +253,7 @@ export default function CustomerView({ tab, setTab, session, restaurants, orders
             </span>
           </div>
           <h2>{open.name}</h2>
+          {open.address && <span className="address-line">{open.address}</span>}
           {open.status !== 'OPEN' && <p className="warn-note">This restaurant is paused. You can browse, but ordering is disabled.</p>}
           {!open.menu.length && <p className="empty-note">This restaurant has no menu items yet.</p>}
           <ul className="menu-items">

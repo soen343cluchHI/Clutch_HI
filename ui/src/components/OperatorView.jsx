@@ -122,7 +122,10 @@ export default function OperatorView({ tab, restaurants, orders, couriers, origi
                 return (
                   <div className="list-row" key={r.id}>
                     <i className={`dot band-${band}`} title={bandLabels[band]} />
-                    <strong className="grow">{r.name}</strong>
+                    <div className="grow">
+                      <strong>{r.name}</strong>
+                      {r.address && <span className="muted">{r.address}</span>}
+                    </div>
                     <span className="muted">{r.status === 'OPEN' ? `${r.queueLength} queued` : 'Paused'}</span>
                     <button
                       className="f-btn ghost sm"

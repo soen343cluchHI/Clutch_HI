@@ -30,6 +30,26 @@ public final class RestaurantOwnershipChecks {
             afterDelete.useStore(store);
             if (!afterDelete.require(created.id()).menu().isEmpty())
                 throw new AssertionError("Menu deletion was not saved");
+            // Every restaurant has a real Montreal street address, and a move is saved.
+            var placed = afterDelete.require(created.id());
+            if (!placed.address().endsWith("Montréal") && !placed.address().endsWith("Verdun"))
+                throw new AssertionError("New restaurant needs a Montreal street address");
+            afterDelete.relocate(created.id(), "2000 Rue Peel, Montréal", -0.61, -0.09);
+            RestaurantService moved = new RestaurantService();
+            moved.useStore(store);
+            var reloaded = moved.require(created.id());
+            if (!reloaded.address().equals("2000 Rue Peel, Montréal") || reloaded.x() != -0.61 || reloaded.y() != -0.09)
+                throw new AssertionError("Restaurant move was not saved");
+            // Stores written before addresses existed hold far-away grid positions; they are moved into Montreal.
+            Path legacy = folder.resolve("legacy.properties");
+            Files.writeString(legacy, "restaurants=old\nrestaurant.old.owner=firebase:owner\nrestaurant.old.name=Old Shop\n"
+                    + "restaurant.old.x=55.0\nrestaurant.old.y=71.0\nrestaurant.old.status=OPEN\nrestaurant.old.items=\n");
+            RestaurantService upgraded = new RestaurantService();
+            upgraded.useStore(legacy);
+            var old = upgraded.require("old");
+            if (!old.hasAddress() || Math.abs(old.x()) > 5 || Math.abs(old.y()) > 5)
+                throw new AssertionError("Legacy restaurant was not placed in Montreal");
+            Files.deleteIfExists(legacy);
             System.out.println("Restaurant ownership and persistence checks passed.");
         } finally {
             Files.deleteIfExists(store);

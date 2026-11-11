@@ -88,11 +88,17 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
     }
   }
 
+  // After a failed command the screen may be stale (another tab or role changed things), so reload it too.
   const act = (action, fields = {}, { refresh: reload = true } = {}) =>
     run(async () => {
-      const result = await send(session, action, fields);
-      if (reload) await refresh(session);
-      return result;
+      try {
+        const result = await send(session, action, fields);
+        if (reload) await refresh(session);
+        return result;
+      } catch (failure) {
+        refresh(session).catch(() => {});
+        throw failure;
+      }
     });
   const ask = (action, fields = {}) => send(session, action, fields, { quiet: true });
 

@@ -1,7 +1,8 @@
 import Field from '../components/Field';
 import FormAlert from '../components/FormAlert';
+import { demoAccounts } from '../demoAccounts';
 
-export default function AuthPage({ registering, resettingPassword, resetSent, email, setEmail, password,
+export default function AuthPage({ onDemoLogin, registering, resettingPassword, resetSent, email, setEmail, password,
   setPassword, busy, error, onSubmit, onResetPassword, onForgotPassword, onBackToSignIn,
   onToggleMode, signupRole, onSignupRoleChange, restaurantName, setRestaurantName, authenticatedSignup = false }) {
   return (
@@ -39,6 +40,24 @@ export default function AuthPage({ registering, resettingPassword, resetSent, em
           {busy ? 'Please wait…' : resettingPassword ? 'Send reset link' : registering ? 'Create Account' : 'Sign In'}
         </button>
       </form>
+      {onDemoLogin && !registering && !resettingPassword && demoAccounts.length > 0 && (
+        <div className="demo-login">
+          <p><strong>Demo accounts</strong> · only while running <code>npm run dev</code></p>
+          <div className="demo-login-grid">
+            {demoAccounts.map((account) => (
+              <button key={account.label} type="button" className="btn btn-secondary" disabled={busy || !account.email}
+                onClick={() => onDemoLogin(account)}>
+                {account.label}
+              </button>
+            ))}
+          </div>
+          <p className="demo-login-hint">
+            {demoAccounts.some((account) => account.email)
+              ? 'Firebase keeps one signed-in account per browser, so use a separate browser or profile for each role.'
+              : 'No demo credentials yet. Add VITE_DEMO_ACCOUNTS to ui/.env.local to enable these buttons.'}
+          </p>
+        </div>
+      )}
       <p className="panel-footer">
         {resettingPassword ? <button type="button" className="btn-link" disabled={busy} onClick={onBackToSignIn}>Back to sign in</button>
           : <>{registering ? 'Already have an account?' : 'New to SugarRush?'}{' '}

@@ -49,6 +49,19 @@ function App() {
   const [profileError, setProfileError] = useState('');
   const [savingSignup, setSavingSignup] = useState(false);
   const [signupFailure, setSignupFailure] = useState('');
+  // Local development shortcut: signs in to a Firebase test account listed in ui/.env.local.
+  async function startDemo(account) {
+    setBusy(true);
+    setError('');
+    try {
+      await signInWithEmailAndPassword(auth, account.email, account.password);
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
 
   useEffect(() => {
     let stopProfile = () => {};
@@ -282,6 +295,7 @@ function App() {
     if (!user || (!profile && signupFailure))
       return (
         <AuthPage
+          onDemoLogin={import.meta.env.DEV ? startDemo : undefined}
           registering={Boolean(user) || registering}
           authenticatedSignup={Boolean(user)}
           restaurantName={restaurantName}

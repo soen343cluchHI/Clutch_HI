@@ -8,6 +8,6 @@ RUN find backend/src -name '*.java' > sources.txt && \
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 COPY --from=build /app/backend/out backend/out
-COPY backend/config/live.properties backend/config/live.properties
+COPY backend/config/app.properties backend/config/app.properties
 EXPOSE 8080
 CMD ["java", "--add-modules", "jdk.httpserver", "-cp", "backend/out", "sugarrush.presentation.http.ApiServer"]

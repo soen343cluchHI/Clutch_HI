@@ -14,7 +14,7 @@ import sugarrush.domain.pricing.*;
 public final class PricingChecks {
     public static void main(String[] args) throws Exception {
         Properties values = new Properties();
-        try (var reader = Files.newBufferedReader(Path.of("backend/config/demo.properties"))) {
+        try (var reader = Files.newBufferedReader(TestWorld.CONFIG)) {
             values.load(reader);
         }
         PricingService pricing = new PricingService(values);
@@ -23,8 +23,9 @@ public final class PricingChecks {
         check(pricing.calculate(new BigDecimal("15.00")), "19.00");
         check(pricing.calculate(new BigDecimal("17.00")), "21.00");
 
-        SugarRush app = SugarRush.fromSeed(Path.of("backend/config/demo.properties"));
-        var customer = app.login("customer", "customer-demo");
+        TestWorld world = TestWorld.create();
+        SugarRush app = world.app;
+        var customer = world.customer;
         OrderService.View small = (OrderService.View) app.execute(Command.place(customer.token(),
                 "sugar-shop", Map.of("cake", 1)));
         check(small.total(), "14.50");
