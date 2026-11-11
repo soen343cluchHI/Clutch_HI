@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import '../styles/cover.css';
 
 const sprinkleColors = ['#f25c8a', '#ffd166', '#5cc8f2', '#8d6bf2', '#ffffff'];
 

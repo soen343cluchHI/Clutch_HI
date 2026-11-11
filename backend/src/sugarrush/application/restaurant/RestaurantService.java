@@ -72,8 +72,7 @@ public final class RestaurantService {
         if (owner.role() != Role.RESTAURANT) throw new SecurityException("Restaurant account required");
         if (name == null || name.isBlank() || name.trim().length() > 80) throw new IllegalArgumentException("Enter a restaurant name (up to 80 characters)");
         String id = UUID.randomUUID().toString();
-        int hash = Math.abs(id.hashCode() % 10000);
-        Restaurant restaurant = new Restaurant(id, owner.id(), name.trim(), 8 + hash % 80, 8 + hash / 100 % 80, Restaurant.Status.OPEN);
+        Restaurant restaurant = new Restaurant(id, owner.id(), name.trim(), startX(id), startY(id), Restaurant.Status.OPEN);
         add(restaurant);
         save();
         return browse(owner).stream().filter(view -> view.id().equals(id)).findFirst().orElseThrow();
@@ -86,12 +85,20 @@ public final class RestaurantService {
             throw new IllegalArgumentException("Restaurant name must be at most 80 characters");
         String id = UUID.nameUUIDFromBytes(("signup:" + owner.id()).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
         if (!restaurants.containsKey(id)) {
-            int hash = Math.abs(id.hashCode() % 10000);
-            add(new Restaurant(id, owner.id(), name.trim(), 8 + hash % 80, 8 + hash / 100 % 80, Restaurant.Status.OPEN));
+            add(new Restaurant(id, owner.id(), name.trim(), startX(id), startY(id), Restaurant.Status.OPEN));
         }
         if (!require(id).ownerId().equals(owner.id())) throw new SecurityException("Restaurant ownership mismatch");
         save();
         return browse(owner).stream().filter(view -> view.id().equals(id)).findFirst().orElseThrow();
+    }
+
+    // New restaurants are placed within a few kilometres of downtown (map units are kilometres).
+    private static double startX(String id) {
+        return -3 + Math.abs(id.hashCode() % 10000) % 100 * 0.06;
+    }
+
+    private static double startY(String id) {
+        return -2 + Math.abs(id.hashCode() % 10000) / 100 % 100 * 0.05;
     }
 
     public void changeStatus(String id, Restaurant.Status status) {

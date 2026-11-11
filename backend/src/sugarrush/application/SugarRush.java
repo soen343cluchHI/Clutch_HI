@@ -5,11 +5,13 @@ import java.nio.file.Path;
 import java.util.*;
 import java.io.Reader;
 import java.nio.file.Files;
+import java.time.Clock;
 import sugarrush.application.auth.*;
 import sugarrush.application.commands.*;
 import sugarrush.application.courier.CourierService;
 import sugarrush.application.events.*;
 import sugarrush.application.dispatch.DispatchService;
+import sugarrush.application.map.CityMapService;
 import sugarrush.application.order.OrderService;
 import sugarrush.application.pricing.PricingService;
 import sugarrush.application.profile.ProfileService;
@@ -20,15 +22,18 @@ import sugarrush.domain.user.*;
 public final class SugarRush {
     private final RegistrationService registration = new RegistrationService();
     private final AuthenticationService authentication = new AuthenticationService(registration);
-    private final RestaurantService restaurants = new RestaurantService();
-    private final EventLogger events = new EventLogger();
-    private final DashboardObserver dashboard = new DashboardObserver();
-    private final OrderEventPublisher publisher = new OrderEventPublisher();
-    private final CommandLog log = new CommandLog();
-    private final OrderService orders;
     private final ProfileService profiles = new ProfileService();
-    private final CourierService couriers;
-    private final CommandProcessor commands;
+    private final Properties config;
+    // The simulated world below is rebuilt from the seed by the operator's RESET_SYSTEM command.
+    private Path seed, restaurantStore;
+    private RestaurantService restaurants;
+    private EventLogger events;
+    private DashboardObserver dashboard;
+    private OrderEventPublisher publisher;
+    private CommandLog log;
+    private OrderService orders;
+    private CourierService couriers;
+    private CommandProcessor commands;
     private final Map<String, User> firebaseAccounts = new HashMap<>();
     private final Map<String, Session> firebaseSessions = new HashMap<>();
     private final FirebaseRegistrationService firebaseRegistrations = new FirebaseRegistrationService();
@@ -36,6 +41,7 @@ public final class SugarRush {
     public synchronized void useRegistrationStore(Path accounts, Path restaurantStore) throws IOException {
         firebaseRegistrations.useStore(accounts);
         restaurants.useStore(restaurantStore);
+        this.restaurantStore = restaurantStore;
     }
 
     public synchronized boolean hasConfiguredFirebaseAccount(String uid) {
@@ -55,16 +61,55 @@ public final class SugarRush {
         return user;
     }
 
-    private SugarRush(PricingService pricing) {
-        orders = new OrderService(restaurants, publisher, pricing);
-        couriers = new CourierService(orders);
+    private SugarRush(Properties config) {
+        this.config = config;
+        buildWorld();
+    }
+
+    private void buildWorld() {
+        restaurants = new RestaurantService();
+        events = new EventLogger();
+        dashboard = new DashboardObserver();
+        publisher = new OrderEventPublisher();
+        log = new CommandLog();
+        double kmPerSecond = number(config, "simulation.courierKmPerSecond", 0);
+        orders = new OrderService(restaurants, publisher, new PricingService(config));
+        couriers = new CourierService(orders, Clock.systemUTC(), kmPerSecond);
         DispatchService dispatch = new DispatchService(orders, couriers, restaurants);
         orders.onReady(dispatch::onOrderReady);
         couriers.onAvailable(dispatch::retryWaitingOrders);
+        CityMapService map = new CityMapService(new CityMapService.Origin(
+                number(config, "map.originLatitude", 45.5017), number(config, "map.originLongitude", -73.5673)),
+                kmPerSecond, couriers, orders);
         commands = new CommandProcessor(authentication, restaurants, orders, profiles,
-                couriers, dispatch, events, dashboard, log);
+                couriers, dispatch, map, events, dashboard, log);
         publisher.subscribe(events);
         publisher.subscribe(dashboard);
+    }
+
+    // Returns orders, couriers, queues and logs to the seeded state; accounts and sessions stay signed in.
+    private void reset() throws IOException {
+        buildWorld();
+        new SeedLoader().loadWorld(seed, registration, restaurants, couriers);
+        if (restaurantStore != null) restaurants.useStore(restaurantStore);
+        for (Session session : firebaseSessions.values()) {
+            try {
+                User user = authentication.verify(session.token());
+                if (user.role() == Role.COURIER) couriers.provision(user);
+            } catch (SecurityException expired) {
+                // An expired session provisions its courier again on the next sign-in.
+            }
+        }
+    }
+
+    private static double number(Properties config, String key, double fallback) {
+        String value = config.getProperty(key);
+        if (value == null || value.isBlank()) return fallback;
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (NumberFormatException invalid) {
+            throw new IllegalArgumentException("Invalid number for " + key, invalid);
+        }
     }
 
     public static SugarRush fromSeed(Path path) throws IOException {
@@ -72,13 +117,15 @@ public final class SugarRush {
         try (Reader reader = Files.newBufferedReader(path)) {
             properties.load(reader);
         }
-        SugarRush app = new SugarRush(new PricingService(properties));
+        SugarRush app = new SugarRush(properties);
+        app.seed = path;
         new SeedLoader().load(path, app.registration, app.restaurants, app.couriers);
         if ("true".equalsIgnoreCase(System.getenv("SUGARRUSH_DEMO_PROFILES")))
             new SeedLoader().loadProfiles(Path.of("backend/config/demo-profiles.properties"), app.registration, app.profiles);
         if (path.getFileName().toString().equals("live.properties")
                 && !"true".equalsIgnoreCase(System.getenv("SUGARRUSH_REMOTE_RESTAURANTS"))) {
-            app.restaurants.useStore(Path.of("backend/data/restaurants.properties"));
+            app.restaurantStore = Path.of("backend/data/restaurants.properties");
+            app.restaurants.useStore(app.restaurantStore);
             app.profiles.useStore(Path.of("backend/data/profiles.properties"));
         }
         for (String key : properties.stringPropertyNames()) {
@@ -144,7 +191,15 @@ public final class SugarRush {
     }
 
     public synchronized Object execute(Command command) {
-        return commands.process(command);
+        Object result = commands.process(command);
+        if (command.action() == Action.RESET_SYSTEM) {
+            try {
+                reset();
+            } catch (IOException failure) {
+                throw new IllegalStateException("Could not reload the seed", failure);
+            }
+        }
+        return result;
     }
 
     public synchronized void importRestaurant(sugarrush.domain.restaurant.Restaurant restaurant) {

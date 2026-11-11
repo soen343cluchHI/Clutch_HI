@@ -7,16 +7,22 @@ import java.util.Properties;
 import sugarrush.domain.pricing.*;
 
 public final class PricingService {
+    // Fare breakdown shown before checkout; total always comes from the same strategies used to charge (R-PRC-01).
+    public record Quote(BigDecimal subtotal, BigDecimal deliveryFee, BigDecimal serviceFee,
+            BigDecimal smallOrderSurcharge, BigDecimal smallOrderThreshold, BigDecimal total) {
+    }
+
+    private final BigDecimal deliveryFee, serviceFee, surcharge;
     private final BigDecimal smallOrderThreshold;
     private final PricingStrategy standard;
     private final PricingStrategy smallOrder;
 
     public PricingService(Properties config) {
         Objects.requireNonNull(config);
-        BigDecimal deliveryFee = amount(config, "pricing.deliveryFee");
-        BigDecimal serviceFee = amount(config, "pricing.serviceFee");
+        deliveryFee = amount(config, "pricing.deliveryFee");
+        serviceFee = amount(config, "pricing.serviceFee");
         smallOrderThreshold = amount(config, "pricing.smallOrderThreshold");
-        BigDecimal surcharge = amount(config, "pricing.smallOrderSurcharge");
+        surcharge = amount(config, "pricing.smallOrderSurcharge");
         standard = new StandardPricingStrategy(deliveryFee, serviceFee);
         smallOrder = new SmallOrderPricingStrategy(standard, surcharge);
     }
@@ -27,6 +33,13 @@ public final class PricingService {
         BigDecimal money = subtotal.setScale(2, RoundingMode.UNNECESSARY);
         PricingStrategy strategy = money.compareTo(smallOrderThreshold) < 0 ? smallOrder : standard;
         return strategy.calculate(money).setScale(2, RoundingMode.UNNECESSARY);
+    }
+
+    public Quote quote(BigDecimal subtotal) {
+        BigDecimal total = calculate(subtotal);
+        BigDecimal money = subtotal.setScale(2, RoundingMode.UNNECESSARY);
+        BigDecimal applied = money.compareTo(smallOrderThreshold) < 0 ? surcharge : BigDecimal.ZERO.setScale(2);
+        return new Quote(money, deliveryFee, serviceFee, applied, smallOrderThreshold, total);
     }
 
     private static BigDecimal amount(Properties config, String key) {

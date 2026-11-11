@@ -76,8 +76,10 @@ public final class FirebaseLoginChecks {
             Response browse = command(base, customer, "BROWSE_RESTAURANTS", Map.of());
             check(browse.status == 200 && browse.array().size() == 2, "Authenticated menus missing");
             Response order = command(base, customer, "PLACE_ORDER",
-                    Map.of("restaurantId", "sugar-shop", "item.cake", "2"));
+                    delivered(Map.of("restaurantId", "sugar-shop", "item.cake", "2")));
             check(order.status == 200, "Signed-in customer cannot place");
+            check(command(base, customer, "PLACE_ORDER", Map.of("restaurantId", "sugar-shop", "item.cake", "1")).status == 400,
+                    "Order placed without a delivery address");
             check(order.object().get("customerId").equals("firebase:customer-a"), "Wrong order owner");
             String id = (String) order.object().get("id");
             check(command(base, customer, "ACCEPT_ORDER", Map.of("orderId", id)).status == 403,
@@ -118,14 +120,14 @@ public final class FirebaseLoginChecks {
             check(command(base, admin, "EVENT_LOG", Map.of()).array().size() == 4, "Transition events missing");
             check(command(base, customer, "EVENT_LOG", Map.of()).status == 403, "Customer received operator events");
             String accepted = (String) command(base, second, "PLACE_ORDER",
-                    Map.of("restaurantId", "sugar-shop", "item.cake", "1")).object().get("id");
+                    delivered(Map.of("restaurantId", "sugar-shop", "item.cake", "1"))).object().get("id");
             check(command(base, staff, "ACCEPT_ORDER", Map.of("orderId", accepted)).status == 200,
                     "Staff cannot accept before pausing");
             check(command(base, staff, "SET_RESTAURANT_STATUS",
                     Map.of("restaurantId", "sugar-shop", "status", "PAUSED")).status == 200,
                     "Staff cannot pause own restaurant");
             check(command(base, second, "PLACE_ORDER",
-                    Map.of("restaurantId", "sugar-shop", "item.cake", "1")).status == 400,
+                    delivered(Map.of("restaurantId", "sugar-shop", "item.cake", "1"))).status == 400,
                     "Paused restaurant accepted a new order");
             for (String action : List.of("START_PREPARING", "MARK_READY")) {
                 check(command(base, staff, action, Map.of("orderId", accepted)).status == 200,
@@ -145,18 +147,18 @@ public final class FirebaseLoginChecks {
                     Map.of("restaurantId", "other-shop", "status", "CLOSED")).status == 200,
                     "Operator cannot close any restaurant");
             check(command(base, second, "PLACE_ORDER",
-                    Map.of("restaurantId", "other-shop", "item.vanilla", "1")).status == 400,
+                    delivered(Map.of("restaurantId", "other-shop", "item.vanilla", "1"))).status == 400,
                     "Closed restaurant accepted a new order");
             check(command(base, admin, "SET_RESTAURANT_STATUS",
                     Map.of("restaurantId", "sugar-shop", "status", "OPEN")).status == 200,
                     "Operator cannot reopen any restaurant");
             check(command(base, second, "PLACE_ORDER",
-                    Map.of("restaurantId", "sugar-shop", "item.cake", "1")).status == 200,
+                    delivered(Map.of("restaurantId", "sugar-shop", "item.cake", "1"))).status == 200,
                     "Reopened restaurant rejected an order");
             List<String> queued = new ArrayList<>();
             for (int i = 0; i < 4; i++) {
                 String placed = (String) command(base, second, "PLACE_ORDER",
-                        Map.of("restaurantId", "sugar-shop", "item.cake", "1")).object().get("id");
+                        delivered(Map.of("restaurantId", "sugar-shop", "item.cake", "1"))).object().get("id");
                 check(command(base, staff, "ACCEPT_ORDER", Map.of("orderId", placed)).status == 200,
                         "Staff cannot accept order");
                 queued.add(placed);
@@ -182,7 +184,7 @@ public final class FirebaseLoginChecks {
             check(command(base, staff, "CANCEL_ORDER", Map.of("orderId", queued.get(3))).status == 403,
                     "Staff cancelled order");
             String fresh = (String) command(base, second, "PLACE_ORDER",
-                    Map.of("restaurantId", "sugar-shop", "item.cake", "1")).object().get("id");
+                    delivered(Map.of("restaurantId", "sugar-shop", "item.cake", "1"))).object().get("id");
             check(command(base, admin, "CANCEL_ORDER", Map.of("orderId", fresh)).status == 403,
                     "Operator cancelled placed order");
             check(command(base, second, "CANCEL_ORDER", Map.of("orderId", fresh)).status == 200,
@@ -221,6 +223,14 @@ public final class FirebaseLoginChecks {
         List<?> array() {
             return (List<?>) Json.object("{\"items\":" + body + "}").get("items");
         }
+    }
+
+    private static Map<String, String> delivered(Map<String, String> fields) {
+        Map<String, String> all = new LinkedHashMap<>(fields);
+        all.put("address", "1455 De Maisonneuve Blvd W, Montreal");
+        all.put("addressX", "-0.91");
+        all.put("addressY", "-0.50");
+        return all;
     }
 
     private static Response command(String base, String token, String action, Map<String, String> fields)

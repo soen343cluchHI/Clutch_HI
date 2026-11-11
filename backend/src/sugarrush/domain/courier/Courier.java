@@ -1,5 +1,7 @@
 package sugarrush.domain.courier;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Objects;
 
 public final class Courier {
@@ -7,9 +9,23 @@ public final class Courier {
         OFFLINE, IDLE, ASSIGNED, CARRYING
     }
 
+    // Map coordinates in kilometres; travel is simulated along a straight line (route planning is out of scope).
+    public record Point(double x, double y) {
+        public Point {
+            if (!Double.isFinite(x) || !Double.isFinite(y))
+                throw new IllegalArgumentException("Invalid position");
+        }
+
+        double distanceTo(Point other) {
+            return Math.hypot(other.x - x, other.y - y);
+        }
+    }
+
     private final int id;
     private final String userId;
-    private final double x, y;
+    private Point origin;
+    private Point destination;
+    private Instant departedAt, arrivesAt;
     private Status status = Status.OFFLINE;
     private String orderId;
     private boolean offerAccepted;
@@ -25,12 +41,10 @@ public final class Courier {
     public Courier(int id, String userId, double x, double y) {
         if (id <= 0 || userId == null || userId.isBlank())
             throw new IllegalArgumentException("Courier identity required");
-        if (!Double.isFinite(x) || !Double.isFinite(y))
-            throw new IllegalArgumentException("Invalid position");
         this.id = id;
         this.userId = userId;
-        this.x = x;
-        this.y = y;
+        this.origin = new Point(x, y);
+        this.destination = origin;
     }
 
     public int id() {
@@ -42,11 +56,52 @@ public final class Courier {
     }
 
     public double x() {
-        return x;
+        return positionAt(Instant.now()).x();
     }
 
     public double y() {
-        return y;
+        return positionAt(Instant.now()).y();
+    }
+
+    public Point positionAt(Instant now) {
+        if (arrivesAt == null || !now.isBefore(arrivesAt)) return destination;
+        if (!now.isAfter(departedAt)) return origin;
+        double progress = (double) Duration.between(departedAt, now).toMillis()
+                / Duration.between(departedAt, arrivesAt).toMillis();
+        return new Point(origin.x() + (destination.x() - origin.x()) * progress,
+                origin.y() + (destination.y() - origin.y()) * progress);
+    }
+
+    public Point destination() {
+        return destination;
+    }
+
+    public Instant arrivesAt() {
+        return arrivesAt;
+    }
+
+    public boolean arrived(Instant now) {
+        return arrivesAt == null || !now.isBefore(arrivesAt);
+    }
+
+    // A non-positive speed means the simulation is disabled and the courier is placed at the target at once.
+    public void travelTo(Point target, Instant now, double kmPerSecond) {
+        Objects.requireNonNull(target);
+        Point start = positionAt(now);
+        double seconds = kmPerSecond > 0 ? start.distanceTo(target) / kmPerSecond : 0;
+        origin = start;
+        destination = target;
+        departedAt = now;
+        arrivesAt = seconds > 0 ? now.plusMillis(Math.round(seconds * 1000)) : null;
+    }
+
+    public void stopAt(Point position) {
+        origin = destination = Objects.requireNonNull(position);
+        departedAt = arrivesAt = null;
+    }
+
+    public void halt(Instant now) {
+        stopAt(positionAt(now));
     }
 
     public Status status() {
