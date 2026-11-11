@@ -126,7 +126,7 @@ export default function LiveMap({
     sync(markers.current.restaurants, layers.current.restaurants, restaurants, (r) => ({
       position: toLatLng(center, r.x, r.y),
       html: restaurantHtml(r, r.id === selectedId, showLabels),
-      tooltip: `<b>${escape(r.name)}</b><br>${r.status === 'OPEN' ? `${r.queueLength ?? 0} in queue` : 'Paused'}`,
+      tooltip: `<b>${escape(r.name)}</b><br>${r.address ? `${escape(r.address)}<br>` : ''}${r.status === 'OPEN' ? `${r.queueLength ?? 0} in queue` : 'Paused'}`,
       onClick: () => latest.current.onSelectRestaurant?.(r.id),
       zIndex: r.id === selectedId ? 500 : 0,
     }));

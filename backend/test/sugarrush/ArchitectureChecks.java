@@ -16,18 +16,20 @@ public final class ArchitectureChecks {
     private static int checks;
 
     public static void main(String[] args) throws Exception {
-        SugarRush app = SugarRush.fromSeed(Path.of("backend/config/demo.properties"));
-        Session customer = app.login("customer", "customer-demo");
-        Session staff = app.login("restaurant", "restaurant-demo");
-        Session other = app.login("restaurant2", "restaurant-demo");
-        Session courier = app.login("courier", "courier-demo");
-        Session operator = app.login("operator", "operator-demo");
+        TestWorld world = TestWorld.create();
+        SugarRush app = world.app;
+        Session customer = world.customer;
+        Session staff = world.staff;
+        Session other = world.other;
+        Session courier = world.courier;
+        Session operator = world.operator;
         expect(SecurityException.class, () -> app.login("customer", "incorrect"));
         expect(IllegalArgumentException.class, () -> app.register("none", "password", List.of()));
         expect(IllegalArgumentException.class,
                 () -> app.register("two", "password", List.of(Role.CUSTOMER, Role.COURIER)));
         expect(SecurityException.class, () -> app.register("admin", "password", List.of(Role.OPERATOR)));
-        expect(IllegalArgumentException.class, () -> app.register("CUSTOMER", "password", List.of(Role.CUSTOMER)));
+        app.register("legacy", "password", List.of(Role.CUSTOMER));
+        expect(IllegalArgumentException.class, () -> app.register("LEGACY", "password", List.of(Role.CUSTOMER)));
         expect(SecurityException.class, () -> app.execute(new Command("", Action.BROWSE_RESTAURANTS)));
         expect(SecurityException.class, () -> app.execute(new Command("fake", Action.ROLE_MENU)));
         expect(SecurityException.class, () -> app.execute(new Command(customer.token(), Action.EVENT_LOG)));

@@ -10,8 +10,10 @@ const statusText = {
   CARRYING: 'Delivering an order',
 };
 
-export default function CourierView({ tab, courier, offer, restaurants, couriers, orders, origin, ledger, disabled, money, act }) {
+export default function CourierView({ tab, courier, offer: polledOffer, restaurants, couriers, orders, origin, ledger, disabled, money, act }) {
   if (!courier) return <p className="empty-note">Loading your courier profile…</p>;
+  // Only trust the offer if it is the order this courier holds right now (it can change between refreshes).
+  const offer = polledOffer && polledOffer.id === courier.orderId ? polledOffer : null;
   const me = couriers.find((c) => c.mine) || { ...courier, arrivesInMs: 0 };
   const restaurant = offer && restaurants.find((r) => r.id === offer.restaurantId);
   const away = secondsLeft(me);
@@ -70,6 +72,7 @@ export default function CourierView({ tab, courier, offer, restaurants, couriers
             {offer ? (
               <>
                 <h2>{restaurant?.name || 'Restaurant'}</h2>
+                {restaurant?.address && <p className="address-line">Pick up at {restaurant.address}</p>}
                 <p className="mono">#{offer.id.slice(0, 8)} · {offer.lines.map((l) => `${l.quantity} × ${l.item.name}`).join(', ')}</p>
                 <p className="muted">Deliver to {offer.deliveryAddress?.label}</p>
                 {restaurant && offer.deliveryAddress && (

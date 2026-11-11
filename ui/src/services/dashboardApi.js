@@ -1,13 +1,15 @@
+const apiBase = () => import.meta.env.VITE_API_URL?.replace(/\/$/, '') || '';
+
 async function post(firebaseUser, path, fields = {}, forceRefresh = false) {
   if (!firebaseUser) throw new Error('Sign in to use the dashboard.');
-  const token = await firebaseUser.getIdToken(forceRefresh);
+  const authorization = `Bearer ${await firebaseUser.getIdToken(forceRefresh)}`;
   let response;
   try {
-    response = await fetch(`${import.meta.env.VITE_API_URL?.replace(/\/$/, '') || ''}${path}`, {
+    response = await fetch(`${apiBase()}${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
-        Authorization: `Bearer ${token}`,
+        Authorization: authorization,
       },
       body: new URLSearchParams(fields),
     });

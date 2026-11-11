@@ -39,6 +39,7 @@ public final class SimulationChecks {
         delivery();
         quote();
         reset();
+        relocation();
         System.out.println("Passed " + checks + " simulation checks.");
     }
 
@@ -123,9 +124,10 @@ public final class SimulationChecks {
     }
 
     private static void quote() throws Exception {
-        SugarRush app = SugarRush.fromSeed(Path.of("backend/config/demo.properties"));
-        Session customer = app.login("customer", "customer-demo");
-        Session staff = app.login("restaurant", "restaurant-demo");
+        TestWorld world = TestWorld.create();
+        SugarRush app = world.app;
+        Session customer = world.customer;
+        Session staff = world.staff;
         var small = (PricingService.Quote) app.execute(new Command(customer.token(), Action.PRICE_QUOTE, "sugar-shop",
                 null, Map.of("cake", 1), null, null, null));
         check(small.subtotal().equals(new BigDecimal("8.50")) && small.smallOrderSurcharge().equals(new BigDecimal("2.00"))
@@ -144,11 +146,13 @@ public final class SimulationChecks {
     }
 
     private static void reset() throws Exception {
-        SugarRush app = SugarRush.fromSeed(Path.of("backend/config/demo.properties"));
-        Session customer = app.login("customer", "customer-demo");
-        Session staff = app.login("restaurant", "restaurant-demo");
-        Session courier = app.login("courier", "courier-demo");
-        Session operator = app.login("operator", "operator-demo");
+        TestWorld world = TestWorld.create();
+        SugarRush app = world.app;
+        Session customer = world.customer;
+        Session staff = world.staff;
+        Session courier = world.courier;
+        Session operator = world.operator;
+        var start = (CourierService.View) app.execute(new Command(courier.token(), Action.COURIER_STATUS));
         app.execute(new Command(courier.token(), Action.GO_ON_DUTY));
         app.execute(Command.place(customer.token(), "sugar-shop", Map.of("cake", 1),
                 Map.of("address", "Concordia", "addressX", "-0.91", "addressY", "-0.50")));
@@ -159,13 +163,44 @@ public final class SimulationChecks {
         app.execute(new Command(operator.token(), Action.RESET_SYSTEM));
         check(((List<?>) app.execute(new Command(operator.token(), Action.LIST_ORDERS))).isEmpty(), "Reset kept orders");
         check(((List<?>) app.execute(new Command(operator.token(), Action.LIST_LEDGER))).isEmpty(), "Reset kept ledger");
-        var shop = ((List<?>) app.execute(new Command(operator.token(), Action.BROWSE_RESTAURANTS))).stream()
-                .map(RestaurantService.View.class::cast).filter(r -> r.id().equals("sugar-shop")).findFirst().orElseThrow();
-        check(shop.status() == Restaurant.Status.OPEN && shop.queueLength() == 0, "Reset kept restaurant state");
+        check(((List<?>) app.execute(new Command(operator.token(), Action.BROWSE_RESTAURANTS))).isEmpty(),
+                "Reset must delete every restaurant");
         var rider = (CourierService.View) app.execute(new Command(courier.token(), Action.COURIER_STATUS));
-        check(rider.status() == Courier.Status.OFFLINE && rider.x() == -0.91, "Reset kept courier state");
+        check(rider.status() == Courier.Status.OFFLINE && rider.x() == start.x() && rider.y() == start.y(),
+                "Reset kept courier state");
         check(app.execute(new Command(customer.token(), Action.SESSION_INFO)) instanceof User,
                 "Sessions must survive the reset");
+        // Restaurant accounts survive and can open a new restaurant straight away.
+        var reopened = (RestaurantService.View) app.execute(new Command(staff.token(), Action.CREATE_RESTAURANT, null, null,
+                null, "Pastry Montreal", null, null));
+        check(reopened.ownerId().equals(staff.user().id()) && !reopened.address().isBlank(),
+                "Restaurant account cannot open a restaurant after reset");
+    }
+
+    private static void relocation() throws Exception {
+        TestWorld world = TestWorld.create();
+        SugarRush app = world.app;
+        Session customer = world.customer;
+        Session staff = world.staff;
+        Session other = world.other;
+        Session operator = world.operator;
+        var seeded = ((List<?>) app.execute(new Command(operator.token(), Action.BROWSE_RESTAURANTS))).stream()
+                .map(RestaurantService.View.class::cast).toList();
+        check(seeded.stream().allMatch(r -> r.address().endsWith("Montréal")), "Seeded restaurants need Montreal addresses");
+        Map<String, String> peel = Map.of("address", "2000 Rue Peel, Montréal", "addressX", "-0.61", "addressY", "-0.09");
+        Command move = new Command(staff.token(), Action.SET_RESTAURANT_LOCATION, "sugar-shop", null, null, null, null, null, peel);
+        expect(SecurityException.class, () -> app.execute(new Command(other.token(), Action.SET_RESTAURANT_LOCATION,
+                "sugar-shop", null, null, null, null, null, peel)));
+        expect(SecurityException.class, () -> app.execute(new Command(customer.token(), Action.SET_RESTAURANT_LOCATION,
+                "sugar-shop", null, null, null, null, null, peel)));
+        expect(IllegalArgumentException.class, () -> app.execute(new Command(staff.token(), Action.SET_RESTAURANT_LOCATION,
+                "sugar-shop", null, null, null, null, null, Map.of("address", "Peel", "addressX", "west", "addressY", "0"))));
+        app.execute(move);
+        var shop = ((List<?>) app.execute(new Command(customer.token(), Action.BROWSE_RESTAURANTS))).stream()
+                .map(RestaurantService.View.class::cast).filter(r -> r.id().equals("sugar-shop")).findFirst().orElseThrow();
+        check(shop.address().equals("2000 Rue Peel, Montréal") && shop.x() == -0.61 && shop.y() == -0.09,
+                "Owner move must update the address and map position");
+
     }
 
     private static Properties pricing() {

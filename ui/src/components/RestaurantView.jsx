@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import AddressPicker from './AddressPicker';
 import LiveMap, { secondsLeft } from './LiveMap';
 import MenuItemImage from './MenuItemImage';
 import { stateLabel } from './OrderProgress';
 import { LedgerTable } from './CustomerView';
+import { reverseAddress, toKm } from '../services/geo';
 import { bandLabels, queueBand } from '../services/queueBand';
 
 const emptyItem = { id: '', name: '', price: '', description: '', imageUrl: '' };
@@ -12,6 +14,7 @@ export default function RestaurantView({ tab, session, restaurants, orders, queu
   const [reasons, setReasons] = useState({});
   const [draft, setDraft] = useState(emptyItem);
   const [newName, setNewName] = useState('');
+  const [newSpot, setNewSpot] = useState(null);
 
   const restaurant = restaurants.find((r) => r.id === restaurantId) || restaurants[0];
   const mine = restaurant ? orders.filter((o) => o.restaurantId === restaurant.id) : [];
@@ -93,6 +96,7 @@ export default function RestaurantView({ tab, session, restaurants, orders, queu
         <div className="hero-row">
           <div className="hero-card">
             <h1>Hello, {restaurant.name}</h1>
+            {restaurant.address && <p className="hero-address">{restaurant.address}</p>}
             <p>
               {placed.length} new order{placed.length === 1 ? '' : 's'} · {queue.length} in your queue · signed in as {name}
             </p>
@@ -221,6 +225,34 @@ export default function RestaurantView({ tab, session, restaurants, orders, queu
     );
   }
 
+  async function moveTo(spot) {
+    const moved = await act('SET_RESTAURANT_LOCATION', { restaurantId: restaurant.id, address: spot.label, addressX: spot.x, addressY: spot.y });
+    if (moved) setNewSpot(null);
+  }
+
+  function renderLocation() {
+    return (
+      <section className="panel">
+        <h3>Restaurant address</h3>
+        <p className="address-line">{restaurant.address || 'No address yet'}</p>
+        <p className="hint">Couriers are sent here for pickup and the map shows your store at this address.</p>
+        <AddressPicker origin={origin} value={newSpot} onChange={setNewSpot} disabled={disabled} />
+        <LiveMap
+          origin={origin}
+          className="map-checkout"
+          restaurants={[restaurant]}
+          drops={newSpot ? [{ id: 'new-spot', ...newSpot, short: 'New address' }] : []}
+          onPick={disabled ? undefined : async (latitude, longitude) => setNewSpot({ label: await reverseAddress(latitude, longitude), ...toKm(origin, latitude, longitude) })}
+          showLabels={false}
+          legend={false}
+        />
+        <button className="f-btn primary" disabled={disabled || !newSpot} onClick={() => moveTo(newSpot)}>
+          {newSpot ? `Move restaurant to ${newSpot.label}` : 'Choose a new address to move'}
+        </button>
+      </section>
+    );
+  }
+
   function renderMenu() {
     return (
       <div className="split">
@@ -264,6 +296,7 @@ export default function RestaurantView({ tab, session, restaurants, orders, queu
           </ul>
         </section>
         <div className="stack">
+          {renderLocation()}
           <form className="panel form" onSubmit={saveItem}>
             <h3>{draft.id ? 'Edit menu item' : 'Add menu item'}</h3>
             <label>

@@ -35,38 +35,40 @@ public final class ApiServer {
     private final FirebaseTokenVerifier verifier;
     private final HttpClient http = HttpClient.newHttpClient();
     private final String databaseUrl;
-    private final boolean remoteRestaurants = "true".equalsIgnoreCase(System.getenv("SUGARRUSH_REMOTE_RESTAURANTS"));
+    // When true, restaurants, sign-up roles and profiles are read from and saved to the Firebase Realtime Database.
+    private final boolean remoteRestaurants;
     private boolean restaurantsLoaded;
     private final Set<String> profilesLoaded = new HashSet<>();
 
+    // In-memory only; used by the automated checks.
     ApiServer(SugarRush application, FirebaseTokenVerifier verifier) {
-        this(application, verifier, null);
+        this(application, verifier, null, false);
     }
 
-    ApiServer(SugarRush application, FirebaseTokenVerifier verifier, String databaseUrl) {
+    ApiServer(SugarRush application, FirebaseTokenVerifier verifier, String databaseUrl, boolean remoteRestaurants) {
+        if (remoteRestaurants && (databaseUrl == null || databaseUrl.isBlank()))
+            throw new IllegalStateException("Firebase database URL required");
         this.application = application;
         this.verifier = verifier;
         this.databaseUrl = databaseUrl;
+        this.remoteRestaurants = remoteRestaurants;
     }
 
     public static void main(String[] args) throws IOException {
-        Path seed = Path.of(args.length > 0 ? args[0] : "backend/config/live.properties");
-        System.out.println("SugarRush account configuration: " + seed.toAbsolutePath());
+        Path config = Path.of(args.length > 0 ? args[0] : "backend/config/app.properties");
+        System.out.println("SugarRush configuration: " + config.toAbsolutePath());
         int port = args.length > 1 ? Integer.parseInt(args[1])
                 : Integer.parseInt(System.getenv().getOrDefault("PORT", "8080"));
         Properties settings = new Properties();
 
-        try (Reader reader = Files.newBufferedReader(seed)) {
+        try (Reader reader = Files.newBufferedReader(config)) {
             settings.load(reader);
         }
 
         String projectId = settings.getProperty("firebase.projectId", "soen343-f701c").trim();
-        SugarRush application = SugarRush.fromSeed(seed);
-        if (!"true".equalsIgnoreCase(System.getenv("SUGARRUSH_REMOTE_RESTAURANTS"))) {
-            Path data = Path.of(System.getenv().getOrDefault("SUGARRUSH_DATA_DIR", "backend/data"));
-            application.useRegistrationStore(data.resolve("firebase-accounts.properties"), data.resolve(seed.getFileName().toString().equals("live.properties") ? "restaurants.properties" : "registered-restaurants.properties"));
-        }
-        ApiServer api = new ApiServer(application, new FirebaseTokenVerifier(projectId), databaseUrl());
+        SugarRush application = SugarRush.fromConfig(config);
+        // Firebase is the only data store, locally and when deployed.
+        ApiServer api = new ApiServer(application, new FirebaseTokenVerifier(projectId), databaseUrl(), true);
         HttpServer server = api.start(port);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop(0)));
         System.out.println("SugarRush backend: http://localhost:" + port);
@@ -152,23 +154,26 @@ public final class ApiServer {
                 return;
             }
             String firebaseToken = authorization.substring(7);
-            if (path.equals("/api/register-account") && application.hasConfiguredFirebaseAccount(identity.uid())) {
-                // Profile recovery must not overwrite an existing bootstrap/demo identity.
-                Session approved = application.firebaseSession(identity.uid(), identity.email());
-                send(exchange, 200, approved.user());
-                return;
-            }
+            Enrollment stored;
             if (remoteRestaurants) {
                 loadRestaurants(firebaseToken);
-                Enrollment stored = remoteEnrollment(identity.uid(), firebaseToken, null);
-                if (stored != null) provisionRemoteAccount(identity.uid(), identity.email(), firebaseToken, stored);
+                stored = remoteEnrollment(identity.uid(), firebaseToken, null);
+                // The backend starts empty; restore the account's sign-up role from Firebase without creating anything.
+                if (stored != null && application.enrollment(identity.uid()) == null)
+                    application.registerFirebaseAccount(identity.uid(), identity.email(), stored.role(), stored.restaurantName());
+            } else {
+                stored = application.enrollment(identity.uid());
             }
             if (path.equals("/api/register-account")) {
                 Enrollment enrollment = new Enrollment(Role.valueOf(required(fields, "role")), fields.get("restaurantName"));
                 if (remoteRestaurants) enrollment = remoteEnrollment(identity.uid(), firebaseToken, enrollment);
-                var user = remoteRestaurants
-                        ? provisionRemoteAccount(identity.uid(), identity.email(), firebaseToken, enrollment)
-                        : application.registerFirebaseAccount(identity.uid(), identity.email(), enrollment.role(), enrollment.restaurantName());
+                var user = application.registerFirebaseAccount(identity.uid(), identity.email(), enrollment.role(),
+                        enrollment.restaurantName());
+                // The sign-up restaurant is created once, on first registration, so a Reset is not undone by later visits.
+                if (stored == null && enrollment.role() == Role.RESTAURANT) {
+                    var created = application.createSignupRestaurant(user, enrollment.restaurantName());
+                    if (remoteRestaurants) saveRestaurant(created.id(), firebaseToken);
+                }
                 send(exchange, 200, user);
                 return;
             }
@@ -199,6 +204,9 @@ public final class ApiServer {
                             fields.get("description"), fields.get("imageUrl")));
             case DELETE_MENU_ITEM -> new Command(token, action, required(fields, "restaurantId"), null, null,
                     required(fields, "itemId"), null, null);
+            case SET_RESTAURANT_LOCATION -> new Command(token, action, required(fields, "restaurantId"), null, null, null,
+                    null, null, Map.of("address", required(fields, "address"), "addressX", required(fields, "addressX"),
+                            "addressY", required(fields, "addressY")));
             case RESTAURANT_QUEUE ->
                 new Command(token, action, required(fields, "restaurantId"), null, null, null, null, null);
             case SET_RESTAURANT_STATUS -> new Command(token, action, required(fields, "restaurantId"), null, null, null,
@@ -216,10 +224,16 @@ public final class ApiServer {
             default -> throw new IllegalArgumentException("This endpoint does not support that command yet");
         
             };
+            if (remoteRestaurants && action == Action.RESET_SYSTEM) {
+                // Check the role before deleting anything in Firebase; the command chain checks it again below.
+                if (!action.permits(session.user().role()))
+                    throw new SecurityException("Action not permitted for " + session.user().role());
+                deleteRemoteRestaurants(firebaseToken);
+            }
             Object result = application.execute(command);
-            if (action == Action.RESET_SYSTEM) restaurantsLoaded = false; // reload remote restaurants after a reset
+            if (action == Action.RESET_SYSTEM) restaurantsLoaded = false; // reload the (now empty) remote restaurants
             if (remoteRestaurants && switch (action) {
-                case CREATE_RESTAURANT, PUT_MENU_ITEM, DELETE_MENU_ITEM, SET_RESTAURANT_STATUS -> true;
+                case CREATE_RESTAURANT, PUT_MENU_ITEM, DELETE_MENU_ITEM, SET_RESTAURANT_STATUS, SET_RESTAURANT_LOCATION -> true;
                 default -> false;
             }) {
                 String restaurantId = action == Action.CREATE_RESTAURANT
@@ -242,37 +256,15 @@ public final class ApiServer {
         }
     }
 
-    private sugarrush.domain.user.User provisionRemoteAccount(String uid, String email, String token, Enrollment enrollment) {
-        if (enrollment.role() != Role.RESTAURANT)
-            return application.registerFirebaseAccount(uid, email, enrollment.role(), enrollment.restaurantName());
-        String id = UUID.nameUUIDFromBytes(("signup:firebase:" + uid).getBytes(StandardCharsets.UTF_8)).toString();
-        try {
-            HttpResponse<String> response = http.send(HttpRequest.newBuilder(URI.create(restaurantUrl(id, token)))
-                    .timeout(java.time.Duration.ofSeconds(10)).GET().build(), HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) throw new IllegalStateException("Could not load registered restaurant");
-            boolean exists = !response.body().trim().equals("null");
-            if (exists) {
-                var data = Json.object(response.body());
-                if (!("firebase:" + uid).equals(data.get("ownerId"))) throw new SecurityException("Restaurant ownership mismatch");
-                try { application.restaurantView(id); }
-                catch (NoSuchElementException missing) {
-                    application.importRestaurant(decodeRestaurant(id, data));
-                }
-            }
-            var user = application.registerFirebaseAccount(uid, email, enrollment.role(), enrollment.restaurantName());
-            if (!exists) saveRestaurant(id, token);
-            return user;
-        } catch (IOException failure) { throw new IllegalStateException("Could not provision restaurant", failure); }
-        catch (InterruptedException failure) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Restaurant provisioning interrupted", failure);
-        }
-    }
-
     private static Restaurant decodeRestaurant(String id, Map<?, ?> data) {
         Restaurant restaurant = new Restaurant(id, String.valueOf(data.get("ownerId")), String.valueOf(data.get("name")),
                 ((Number) data.get("x")).doubleValue(), ((Number) data.get("y")).doubleValue(),
                 Restaurant.Status.valueOf(String.valueOf(data.get("status"))));
+        // Restaurants saved before street addresses existed get a real Montreal address.
+        if (data.get("address") instanceof String address && !address.isBlank())
+            restaurant.relocate(address, restaurant.x(), restaurant.y());
+        else
+            sugarrush.application.restaurant.RestaurantService.placeInMontreal(restaurant);
         if (data.get("menu") instanceof List<?> menu) for (Object raw : menu) {
             if (!(raw instanceof Map<?, ?> item)) continue;
             restaurant.putItem(new MenuItem(String.valueOf(item.get("id")), String.valueOf(item.get("name")),
@@ -343,6 +335,27 @@ public final class ApiServer {
         } catch (InterruptedException failure) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Could not load restaurants from Firebase", failure);
+        }
+    }
+
+    // Operator reset: removes every restaurant document. Accounts (users, accountRegistrations, profiles) are kept.
+    private void deleteRemoteRestaurants(String token) {
+        try {
+            HttpResponse<String> listed = http.send(HttpRequest.newBuilder(URI.create(restaurantUrl(null, token) + "&shallow=true"))
+                    .timeout(java.time.Duration.ofSeconds(10)).GET().build(), HttpResponse.BodyHandlers.ofString());
+            if (listed.statusCode() != 200) throw new IllegalStateException("Could not list restaurants in Firebase");
+            if (listed.body().trim().equals("null")) return;
+            for (String id : Json.object(listed.body()).keySet()) {
+                HttpResponse<String> deleted = http.send(HttpRequest.newBuilder(URI.create(restaurantUrl(id, token)))
+                        .timeout(java.time.Duration.ofSeconds(10)).DELETE().build(), HttpResponse.BodyHandlers.ofString());
+                if (deleted.statusCode() != 200)
+                    throw new IllegalStateException("Could not delete restaurants in Firebase; deploy the updated database rules");
+            }
+        } catch (IOException failure) {
+            throw new IllegalStateException("Could not delete restaurants in Firebase", failure);
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Restaurant deletion interrupted", failure);
         }
     }
 

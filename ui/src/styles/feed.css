@@ -45,6 +45,8 @@
 .feed .empty-note { color: var(--muted); padding: 8px 0; }
 .feed .warn-note { background: #fff4e0; color: #8a5a06; border-radius: 10px; padding: 8px 12px; font-size: 13px; }
 .feed .negative { color: #b42318; font-weight: 700; }
+.feed .address-line { color: #5b4540; font-size: 13px; font-weight: 600; }
+.feed .hero-address { color: #fff; font-weight: 600; opacity: 0.92; }
 
 /* Inputs */
 .feed input:not([type='checkbox']),

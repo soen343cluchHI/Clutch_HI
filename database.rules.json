@@ -42,8 +42,11 @@
     "restaurants": {
       ".read": "auth != null",
       "$id": {
-        ".write": "auth != null && (root.child('accountRegistrations').child(auth.uid).child('role').val() === 'RESTAURANT' || root.child('users').child(auth.uid).child('role').val() === 'Restaurant') && newData.child('ownerId').val() === 'firebase:' + auth.uid && (!data.exists() || data.child('ownerId').val() === newData.child('ownerId').val())",
+        ".write": "auth != null && (((root.child('accountRegistrations').child(auth.uid).child('role').val() === 'RESTAURANT' || root.child('users').child(auth.uid).child('role').val() === 'Restaurant') && newData.child('ownerId').val() === 'firebase:' + auth.uid && (!data.exists() || data.child('ownerId').val() === newData.child('ownerId').val())) || (root.child('accountRegistrations').child(auth.uid).child('role').val() === 'OPERATOR' && data.exists() && (!newData.exists() || newData.child('ownerId').val() === data.child('ownerId').val())))",
         ".validate": "newData.hasChildren(['ownerId', 'name', 'x', 'y', 'status'])",
+        "address": {
+          ".validate": "newData.isString() && newData.val().length <= 200"
+        },
         "name": {
           ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 80"
         },

@@ -2,7 +2,7 @@
 
 ## R-PRC-01 pricing rules
 
-The order subtotal is the sum of each menu item's price at placement multiplied by its quantity. The fare adds a delivery fee and a service fee. When the subtotal is strictly below the small-order threshold, it also adds a small-order surcharge. The threshold comparison uses the item subtotal before fees. The configured values are identical in `backend/config/demo.properties` and `backend/config/live.properties`:
+The order subtotal is the sum of each menu item's price at placement multiplied by its quantity. The fare adds a delivery fee and a service fee. When the subtotal is strictly below the small-order threshold, it also adds a small-order surcharge. The threshold comparison uses the item subtotal before fees. The configured values are in `backend/config/app.properties`:
 
 | Configuration property | Value (CAD) |
 | --- | ---: |

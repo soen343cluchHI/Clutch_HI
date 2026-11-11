@@ -8,7 +8,9 @@ public final class Restaurant {
     }
 
     private final String id, ownerId, name;
-    private final double x, y;
+    // Street address plus map position in kilometres from the city origin; blank when not set yet.
+    private String address = "";
+    private double x, y;
     private Status status;
     private final Map<String, MenuItem> menu = new LinkedHashMap<>();
     private final PreparationQueue queue = new PreparationQueue();
@@ -36,6 +38,26 @@ public final class Restaurant {
 
     public String name() {
         return name;
+    }
+
+    public String address() {
+        return address;
+    }
+
+    public boolean hasAddress() {
+        return !address.isBlank();
+    }
+
+    public void relocate(String address, double x, double y) {
+        if (address == null || address.isBlank())
+            throw new IllegalArgumentException("Restaurant address required");
+        if (address.trim().length() > 200)
+            throw new IllegalArgumentException("Restaurant address must be at most 200 characters");
+        if (!Double.isFinite(x) || !Double.isFinite(y))
+            throw new IllegalArgumentException("Invalid position");
+        this.address = address.trim();
+        this.x = x;
+        this.y = y;
     }
 
     public double x() {

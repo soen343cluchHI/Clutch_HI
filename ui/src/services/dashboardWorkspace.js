@@ -36,6 +36,7 @@ const supportedActions = new Set([
   'VIEW_ORDER_SUMMARY',
   'LIST_LEDGER',
   'RESET_SYSTEM',
+  'SET_RESTAURANT_LOCATION',
 ]);
 
 export function workspaceActions(menu) {
