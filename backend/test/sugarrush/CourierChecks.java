@@ -24,7 +24,7 @@ public final class CourierChecks {
         Session courier = app.login("courier", "courier-demo");
         Session operator = app.login("operator", "operator-demo");
         CourierService.View seeded = (CourierService.View) app.execute(new Command(courier.token(), Action.COURIER_STATUS));
-        check(seeded.id() == 1 && seeded.x() == 15 && seeded.y() == 25, "Seed courier missing");
+        check(seeded.id() == 1 && seeded.x() == -0.91 && seeded.y() == -0.50, "Seed courier missing");
         check(seeded.status() == Courier.Status.OFFLINE && seeded.orderId() == null, "Seed courier not offline");
         for (Session session : List.of(customer, staff, operator)) {
             expect(SecurityException.class, () -> app.execute(new Command(session.token(), Action.GO_ON_DUTY)));

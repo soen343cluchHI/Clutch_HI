@@ -30,6 +30,11 @@ public record Command(String sessionToken, Action action, String restaurantId, S
         return new Command(token, Action.PLACE_ORDER, restaurant, null, items, null, null, null);
     }
 
+    public static Command place(String token, String restaurant, Map<String, Integer> items,
+            Map<String, String> address) {
+        return new Command(token, Action.PLACE_ORDER, restaurant, null, items, null, null, null, address);
+    }
+
     public static Command order(String token, Action action, String order, String reason) {
         return new Command(token, action, null, order, null, reason, null, null);
     }

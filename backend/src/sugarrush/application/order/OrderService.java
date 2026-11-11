@@ -11,10 +11,11 @@ import sugarrush.domain.user.*;
 import java.time.Instant;
 import sugarrush.application.billing.LedgerService;
 import sugarrush.domain.billing.LedgerEntry;
+import sugarrush.domain.courier.Courier;
 
 public final class OrderService {
     public record View(String id, String customerId, String restaurantId, List<OrderLine> lines, BigDecimal total,
-            String state, String rejectionReason) {
+            String state, String rejectionReason, DeliveryAddress deliveryAddress) {
     }
 
     //To define the info the summary of the order contains
@@ -52,16 +53,41 @@ public final class OrderService {
     }
 
     public View place(User user, String restaurantId, Map<String, Integer> items) {
+        return place(user, restaurantId, items, null);
+    }
+
+    public View place(User user, String restaurantId, Map<String, Integer> items, DeliveryAddress address) {
         Restaurant r = restaurants.require(restaurantId);
-        List<OrderLine> lines = items.entrySet().stream().map(e -> new OrderLine(r.item(e.getKey()), e.getValue()))
-                .toList();
-        Order order = new Order(UUID.randomUUID().toString(), user.id(), r, lines);
+        List<OrderLine> lines = lines(r, items);
+        Order order = address == null ? new Order(UUID.randomUUID().toString(), user.id(), r, lines)
+                : new Order(UUID.randomUUID().toString(), user.id(), r, lines, address);
         pricing.calculate(order.total());
         orders.put(order.id(), order);
         OrderEvent event = order.placedEvent(); //every order gets a ledger entry when placed
         ledger.record(order, event, BigDecimal.ZERO.setScale(2)); //reuse the same event and timestamp as the existing event logger
         publisher.publish(event);
         return view(order);
+    }
+
+    // Same subtotal and pricing rules as place(), so the checkout preview matches the charge.
+    public PricingService.Quote quote(String restaurantId, Map<String, Integer> items) {
+        Restaurant r = restaurants.require(restaurantId);
+        return pricing.quote(lines(r, items).stream().map(OrderLine::total).reduce(BigDecimal.ZERO, BigDecimal::add));
+    }
+
+    private static List<OrderLine> lines(Restaurant r, Map<String, Integer> items) {
+        return items.entrySet().stream().map(e -> new OrderLine(r.item(e.getKey()), e.getValue())).toList();
+    }
+
+    // Where a courier collects the order and where it drops it off.
+    public Courier.Point pickupPoint(String orderId) {
+        Restaurant r = restaurants.require(require(orderId).restaurantId());
+        return new Courier.Point(r.x(), r.y());
+    }
+
+    public Courier.Point dropoffPoint(String orderId) {
+        DeliveryAddress address = require(orderId).deliveryAddress();
+        return new Courier.Point(address.x(), address.y());
     }
 
     public Order require(String id) {
@@ -90,6 +116,11 @@ public final class OrderService {
     }
 
     //defines the four role-access rules
+    public boolean canView(User user, String orderId) {
+        Order order = orders.get(orderId);
+        return order != null && canView(user, order);
+    }
+
     private boolean canView(User user, Order order) {
         return switch (user.role()) {
             case CUSTOMER ->
@@ -178,7 +209,8 @@ public final class OrderService {
     }
 
     public View view(Order o) {
-        return new View(o.id(), o.customerId(), o.restaurantId(), o.lines(), pricing.calculate(o.total()), o.state(), o.rejectionReason());
+        return new View(o.id(), o.customerId(), o.restaurantId(), o.lines(), pricing.calculate(o.total()), o.state(), o.rejectionReason(),
+                o.deliveryAddress());
     }
 
     public Summary summary(String orderId) {

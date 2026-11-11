@@ -4,9 +4,12 @@ import sugarrush.application.auth.AuthenticationService;
 import sugarrush.application.courier.CourierService;
 import sugarrush.application.dispatch.DispatchService;
 import sugarrush.application.events.*;
+import sugarrush.application.map.CityMapService;
 import sugarrush.application.order.OrderService;
 import sugarrush.application.profile.ProfileService;
 import sugarrush.application.restaurant.RestaurantService;
+import java.util.Map;
+import sugarrush.domain.order.DeliveryAddress;
 import sugarrush.domain.user.User;
 
 public final class ExecutionHandler extends CommandHandler {
@@ -17,13 +20,14 @@ public final class ExecutionHandler extends CommandHandler {
     private final ProfileService profiles;
     private final CourierService couriers;
     private final DispatchService dispatch;
+    private final CityMapService map;
     private final EventLogger events;
     private final DashboardObserver dashboard;
     private final CommandLog log;
 
     public ExecutionHandler(AuthenticationService auth, RestaurantService restaurants, OrderService orders,
-            ProfileService profiles, CourierService couriers, DispatchService dispatch, EventLogger events, DashboardObserver dashboard,
-            CommandLog log) {
+            ProfileService profiles, CourierService couriers, DispatchService dispatch, CityMapService map, EventLogger events,
+            DashboardObserver dashboard, CommandLog log) {
         super(null);
         this.auth = auth;
         this.restaurants = restaurants;
@@ -31,6 +35,7 @@ public final class ExecutionHandler extends CommandHandler {
         this.profiles = profiles;
         this.couriers = couriers;
         this.dispatch = dispatch;
+        this.map = map;
         this.events = events;
         this.dashboard = dashboard;
         this.log = log;
@@ -49,7 +54,10 @@ public final class ExecutionHandler extends CommandHandler {
         case CREATE_RESTAURANT -> restaurants.create(user, c.reason());
         case LIST_ORDERS -> orders.visible(user);
         case VIEW_ORDER_SUMMARY -> orders.summary(c.orderId());// connects your new command to the summary retrieval method
-        case PLACE_ORDER -> orders.place(user, c.restaurantId(), c.items()); // handles the retrival of summary
+        case PLACE_ORDER -> orders.place(user, c.restaurantId(), c.items(), deliveryAddress(c.fields()));
+        case PRICE_QUOTE -> orders.quote(c.restaurantId(), c.items());
+        case CITY_MAP -> map.view(user);
+        case RESET_SYSTEM -> "System reset to its initial state"; // SugarRush rebuilds the world after authorization passes
         case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER,
                 START_PREPARING, MARK_READY, REFUND_ORDER ->
             orders.transition(c.orderId(), c.action().name(), c.reason());
@@ -85,5 +93,15 @@ public final class ExecutionHandler extends CommandHandler {
         case COMMAND_LOG -> log.all();
         case LIST_LEDGER -> orders.ledgerEntries(user);
         };
+    }
+
+    private static DeliveryAddress deliveryAddress(Map<String, String> fields) {
+        if (!fields.containsKey("address")) return null;
+        try {
+            return new DeliveryAddress(fields.get("address"), Double.parseDouble(fields.get("addressX")),
+                    Double.parseDouble(fields.get("addressY")));
+        } catch (NullPointerException | NumberFormatException invalid) {
+            throw new IllegalArgumentException("Delivery address needs valid map coordinates");
+        }
     }
 }

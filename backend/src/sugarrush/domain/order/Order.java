@@ -8,10 +8,18 @@ import sugarrush.domain.restaurant.Restaurant;
 public final class Order {
     private final String id, customerId, restaurantId;
     private final List<OrderLine> lines;
+    private final DeliveryAddress deliveryAddress;
     private OrderState state = new PlacedState();
     private String rejectionReason;
 
+    // Without an address the order is dropped off at the restaurant itself.
     public Order(String id, String customerId, Restaurant restaurant, List<OrderLine> lines) {
+        this(id, customerId, restaurant, lines,
+                new DeliveryAddress(restaurant.name(), restaurant.x(), restaurant.y()));
+    }
+
+    public Order(String id, String customerId, Restaurant restaurant, List<OrderLine> lines,
+            DeliveryAddress deliveryAddress) {
         if (id == null || id.isBlank() || customerId == null || customerId.isBlank())
             throw new IllegalArgumentException("Order identity required");
         restaurant.requireOpen();
@@ -24,6 +32,7 @@ public final class Order {
         this.customerId = customerId;
         this.restaurantId = restaurant.id();
         this.lines = List.copyOf(lines);
+        this.deliveryAddress = Objects.requireNonNull(deliveryAddress, "Delivery address required");
     }
 
     public String id() {
@@ -36,6 +45,10 @@ public final class Order {
 
     public String restaurantId() {
         return restaurantId;
+    }
+
+    public DeliveryAddress deliveryAddress() {
+        return deliveryAddress;
     }
 
     public String state() {

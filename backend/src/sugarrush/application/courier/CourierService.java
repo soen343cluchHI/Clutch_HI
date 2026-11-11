@@ -1,16 +1,23 @@
 package sugarrush.application.courier;
 
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import sugarrush.application.order.OrderService;
 import sugarrush.domain.courier.Courier;
 import sugarrush.domain.user.*;
 
 public final class CourierService {
-    public record View(int id, String userId, double x, double y, Courier.Status status, String orderId, boolean offerAccepted) {
+    // x/y is the simulated position now; target and arrivesInMs let the dashboard animate the trip.
+    public record View(int id, String userId, double x, double y, Courier.Status status, String orderId, boolean offerAccepted,
+            double targetX, double targetY, long arrivesInMs) {
     }
 
     private final Map<Integer, Courier> couriers = new TreeMap<>();
     private final OrderService orders;
+    private final Clock clock;
+    private final double kmPerSecond;
     private Runnable availableHandler = () -> {};
 
     public void onAvailable(Runnable handler) {
@@ -18,7 +25,14 @@ public final class CourierService {
     }
 
     public CourierService(OrderService orders) {
+        this(orders, Clock.systemUTC(), 0);
+    }
+
+    // kmPerSecond <= 0 turns the travel simulation off: couriers jump straight to each stop.
+    public CourierService(OrderService orders, Clock clock, double kmPerSecond) {
         this.orders = orders;
+        this.clock = Objects.requireNonNull(clock);
+        this.kmPerSecond = kmPerSecond;
     }
 
     public void add(Courier courier) {
@@ -33,7 +47,8 @@ public final class CourierService {
         if (couriers.values().stream().anyMatch(c -> c.userId().equals(user.id()))) return;
         int id = couriers.isEmpty() ? 1 : Collections.max(couriers.keySet()) + 1;
         int hash = Math.abs(user.id().hashCode() % 10000);
-        add(new Courier(id, user.id(), 8 + hash % 80, 8 + hash / 100 % 80));
+        // New couriers start somewhere within a few kilometres of downtown.
+        add(new Courier(id, user.id(), -3 + hash % 100 * 0.06, -2 + hash / 100 % 100 * 0.05));
     }
 
     public Courier require(int id) {
@@ -54,7 +69,7 @@ public final class CourierService {
     }
 
     public List<View> all() {
-        return couriers.values().stream().map(CourierService::view).toList();
+        return couriers.values().stream().map(this::view).toList();
     }
 
     public View goOnDuty(User user) {
@@ -77,6 +92,7 @@ public final class CourierService {
             throw new IllegalStateException("Order already has a courier");
         Courier courier = require(courierId);
         courier.assign(orderId);
+        courier.travelTo(orders.pickupPoint(orderId), clock.instant(), kmPerSecond);
         return view(courier);
     }
 
@@ -94,6 +110,7 @@ public final class CourierService {
             throw new IllegalStateException("Order has another courier");
 
         current.release(orderId);
+        current.halt(clock.instant());
         View assigned = assign(replacementCourierId, orderId);
 
         availableHandler.run();
@@ -131,6 +148,8 @@ public final class CourierService {
 
         OrderService.View order = orders.transition(orderId, "CONFIRM_PICKUP", null);
         courier.pickUp(orderId);
+        courier.stopAt(orders.pickupPoint(orderId));
+        courier.travelTo(orders.dropoffPoint(orderId), clock.instant(), kmPerSecond);
         orders.recordCarrier(orderId, user);
         return order;
     }
@@ -139,11 +158,16 @@ public final class CourierService {
         Courier courier = requireHandoff(user, orderId, Courier.Status.CARRYING, "PickedUp");
         OrderService.View order = orders.transition(orderId, "CONFIRM_DELIVERY", null);
         courier.deliver(orderId);
+        courier.stopAt(orders.dropoffPoint(orderId));
         availableHandler.run();
         return order;
     }
 
-    private static View view(Courier c) {
-        return new View(c.id(), c.userId(), c.x(), c.y(), c.status(), c.orderId(), c.offerAccepted());
+    private View view(Courier c) {
+        Instant now = clock.instant();
+        Courier.Point position = c.positionAt(now);
+        long remaining = c.arrived(now) ? 0 : Duration.between(now, c.arrivesAt()).toMillis();
+        return new View(c.id(), c.userId(), position.x(), position.y(), c.status(), c.orderId(), c.offerAccepted(),
+                c.destination().x(), c.destination().y(), remaining);
     }
 }

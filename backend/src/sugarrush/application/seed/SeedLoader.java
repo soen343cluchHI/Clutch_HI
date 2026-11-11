@@ -44,6 +44,21 @@ public final class SeedLoader {
         }
         if (!roles.containsAll(EnumSet.allOf(Role.class)))
             throw new IllegalArgumentException("Seed needs an account per role");
+        loadWorld(p, registration, restaurants, couriers);
+    }
+
+    // Restaurants and couriers only; the accounts are already registered (used by the operator reset).
+    public void loadWorld(Path path, RegistrationService registration, RestaurantService restaurants,
+            CourierService couriers) throws IOException {
+        Properties p = new Properties();
+        try (Reader reader = Files.newBufferedReader(path)) {
+            p.load(reader);
+        }
+        loadWorld(p, registration, restaurants, couriers);
+    }
+
+    private void loadWorld(Properties p, RegistrationService registration, RestaurantService restaurants,
+            CourierService couriers) {
         for (String key : optionalIds(p, "restaurants")) {
             String base = "restaurant." + key + ".";
             User owner = registration.byUsername(required(p, base + "owner"));

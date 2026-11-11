@@ -9,6 +9,14 @@ Repository for SOEN343 project. Team name is Clutch_HI
 
 Local runs will run with the seeded accounts already present.
 
+#### City map and delivery simulation
+- The dashboard shows a real map of Montreal (OpenStreetMap tiles through Leaflet), so the browser needs internet access.
+- Backend coordinates are kilometres east (`x`) and north (`y`) of `map.originLatitude` / `map.originLongitude` in `backend/config/demo.properties`. Courier assignment uses the straight-line distance between those points (R-DLV-02).
+- Customers choose a delivery address by searching (OpenStreetMap Nominatim), picking a suggested place or tapping the map.
+- Couriers travel in a straight line at `simulation.courierKmPerSecond` (sped up for the demo). Set it to `0` to turn the travel simulation off.
+- Pricing values are read from the same file: `pricing.deliveryFee`, `pricing.serviceFee`, `pricing.smallOrderThreshold` and `pricing.smallOrderSurcharge`.
+- The operator's **Reset simulation** button returns orders, the ledger, queues and couriers to the seeded state.
+
 ### Team members:
 
 Louay Dridi - 40309145
