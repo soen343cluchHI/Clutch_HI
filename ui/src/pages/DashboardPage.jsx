@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import '@fontsource-variable/fraunces';
+import AccountSetup from '../components/AccountSetup';
 import ConsoleDrawer from '../components/ConsoleDrawer';
 import CourierView from '../components/CourierView';
 import CustomerView from '../components/CustomerView';
@@ -126,6 +127,16 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
     connectAccount();
   }, [firebaseUser]);
 
+  // Saves the account type of an account that never chose one, then reconnects with the new role.
+  async function chooseAccountType(role, restaurantName) {
+    const saved = await run(async () => {
+      await api.registerAccount(firebaseUser, role, restaurantName);
+      log('REGISTER_ACCOUNT', true, `Account type saved: ${role}`);
+      return true;
+    });
+    if (saved) await connectAccount();
+  }
+
   // Live updates: couriers move and orders change while other roles act.
   useEffect(() => {
     if (!session) return undefined;
@@ -247,6 +258,7 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
             )}
           </section>
         )}
+        {session && session.user.enrolled === false && <AccountSetup disabled={disabled} onChoose={chooseAccountType} />}
         {role === 'CUSTOMER' && <CustomerView {...shared} setTab={setTab} ask={ask} />}
         {role === 'RESTAURANT' && <RestaurantView {...shared} />}
         {role === 'OPERATOR' && <OperatorView {...shared} />}

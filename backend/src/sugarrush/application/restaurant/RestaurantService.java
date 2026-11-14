@@ -151,6 +151,15 @@ public final class RestaurantService {
         restaurants.putIfAbsent(restaurant.id(), restaurant);
     }
 
+    // Undoes a creation whose remote save failed, so a retry starts clean.
+    public void remove(String id) {
+        if (restaurants.remove(id) != null) save();
+    }
+
+    public boolean ownsAny(String ownerId) {
+        return restaurants.values().stream().anyMatch(r -> r.ownerId().equals(ownerId));
+    }
+
     public Restaurant require(String id) {
         Restaurant restaurant = restaurants.get(id);
         if (restaurant == null)

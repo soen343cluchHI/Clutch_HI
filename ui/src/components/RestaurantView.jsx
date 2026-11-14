@@ -9,7 +9,7 @@ import { bandLabels, queueBand } from '../services/queueBand';
 
 const emptyItem = { id: '', name: '', price: '', description: '', imageUrl: '' };
 
-export default function RestaurantView({ tab, session, restaurants, orders, queues, couriers, origin, ledger, disabled, money, act }) {
+export default function RestaurantView({ tab, session, restaurants, orders, queues, couriers, origin, ledger, loaded, disabled, money, act }) {
   const [restaurantId, setRestaurantId] = useState('');
   const [reasons, setReasons] = useState({});
   const [draft, setDraft] = useState(emptyItem);
@@ -70,11 +70,16 @@ export default function RestaurantView({ tab, session, restaurants, orders, queu
     return seconds ? `Courier C${courier.id} arrives in ${seconds}s` : `Courier C${courier.id} is here for pickup`;
   }
 
+  // Wait for the first load, so an owner is never offered to create a restaurant they already have.
+  if (!restaurant && !loaded) return <p className="empty-note">Loading your restaurant…</p>;
   if (!restaurant)
     return (
       <section className="panel narrow">
         <h2>Create your restaurant</h2>
-        <p className="muted">Your account doesn’t own a restaurant yet.</p>
+        <p className="muted">
+          Your account doesn’t own a restaurant yet (an operator reset removes every restaurant). Name it to start taking
+          orders; you can set its address and menu next.
+        </p>
         <CreateForm value={newName} onChange={setNewName} onSubmit={createRestaurant} disabled={disabled} />
       </section>
     );
