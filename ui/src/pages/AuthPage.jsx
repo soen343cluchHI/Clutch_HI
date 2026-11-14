@@ -8,10 +8,11 @@ export default function AuthPage({ onDemoLogin, registering, resettingPassword, 
   return (
     <section className="panel" key={resettingPassword ? 'reset' : registering ? 'register' : 'login'}>
       <header className="panel-header">
-        <h1>{resettingPassword ? 'Reset your password' : registering ? 'Create your account' : 'Sign in'}</h1>
+        <h1>{resettingPassword ? 'Reset your password' : authenticatedSignup ? 'Finish setting up your account' : registering ? 'Create your account' : 'Sign in'}</h1>
         <p>{resettingPassword ? 'Enter your email and we’ll send you a link to reset your password.'
-          : registering ? 'Choose your account type and enter your details.'
-            : 'Welcome back. Sign in with your email and password.'}</p>
+          : authenticatedSignup ? 'You’re signed in. Choose your account type to continue.'
+            : registering ? 'Choose your account type and enter your details.'
+              : 'Welcome back. Sign in with your email and password.'}</p>
       </header>
       <form className="stack" onSubmit={resettingPassword ? onResetPassword : onSubmit}>
         {registering && !resettingPassword && <fieldset className="role-picker" disabled={busy}>
@@ -31,13 +32,14 @@ export default function AuthPage({ onDemoLogin, registering, resettingPassword, 
           hint={registering ? 'At least 6 characters.' : undefined}
           value={password} onChange={(e) => setPassword(e.target.value)} />}
         {registering && signupRole === 'Restaurant' && !resettingPassword &&
-          <Field label="Restaurant name (optional)" name="restaurantName" autoComplete="organization" maxLength={80}
+          <Field label="Restaurant name" name="restaurantName" autoComplete="organization" maxLength={80} required
+            hint="Customers see this name. You can open more restaurants later from your dashboard."
             value={restaurantName} onChange={event => setRestaurantName(event.target.value)} />}
         {!registering && !resettingPassword && <button type="button" className="btn-link forgot-link" disabled={busy} onClick={onForgotPassword}>Forgot password?</button>}
         <FormAlert message={error} />
         {resetSent && <p className="form-success" role="status">If this email has an account, check your inbox for a reset link.</p>}
         <button className="btn btn-primary" disabled={busy}>
-          {busy ? 'Please wait…' : resettingPassword ? 'Send reset link' : registering ? 'Create Account' : 'Sign In'}
+          {busy ? 'Please wait…' : resettingPassword ? 'Send reset link' : authenticatedSignup ? 'Continue' : registering ? 'Create Account' : 'Sign In'}
         </button>
       </form>
       {onDemoLogin && !registering && !resettingPassword && demoAccounts.length > 0 && (
@@ -60,9 +62,9 @@ export default function AuthPage({ onDemoLogin, registering, resettingPassword, 
       )}
       <p className="panel-footer">
         {resettingPassword ? <button type="button" className="btn-link" disabled={busy} onClick={onBackToSignIn}>Back to sign in</button>
-          : <>{registering ? 'Already have an account?' : 'New to SugarRush?'}{' '}
+          : <>{authenticatedSignup ? 'Wrong account?' : registering ? 'Already have an account?' : 'New to SugarRush?'}{' '}
             <button type="button" className="btn-link" disabled={busy} onClick={onToggleMode}>
-              {registering ? 'Sign in' : 'Create an account'}
+              {authenticatedSignup ? 'Sign out' : registering ? 'Sign in' : 'Create an account'}
             </button></>}
       </p>
     </section>

@@ -165,6 +165,23 @@ public final class SugarRush {
         profiles.put(userId, profile);
     }
 
+    public synchronized void removeRestaurant(String id) {
+        restaurants.remove(id);
+    }
+
+    public synchronized boolean ownsRestaurant(String userId) {
+        return restaurants.ownsAny(userId);
+    }
+
+    public synchronized boolean hasRestaurant(String id) {
+        try {
+            restaurants.require(id);
+            return true;
+        } catch (IllegalArgumentException missing) {
+            return false;
+        }
+    }
+
     public synchronized RestaurantService.View restaurantView(String id) {
         return restaurants.browse(new User("system", "system", Role.OPERATOR)).stream()
                 .filter(view -> view.id().equals(id)).findFirst().orElseThrow();

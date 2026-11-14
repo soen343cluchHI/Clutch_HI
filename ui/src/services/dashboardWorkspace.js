@@ -59,6 +59,7 @@ export const emptyWorkspace = {
   ledger: [],
   courier: null,
   offer: null,
+  loaded: false,
 };
 
 // Loads everything the signed-in role is allowed to see, in parallel.
@@ -88,5 +89,6 @@ export async function loadWorkspace(current, send) {
     ledger,
     courier,
     offer,
+    loaded: true,
   };
 }

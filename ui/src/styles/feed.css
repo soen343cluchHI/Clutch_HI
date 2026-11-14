@@ -380,3 +380,9 @@
   .map-big { height: 420px; }
   .feed h1 { font-size: 26px; }
 }
+
+/* Account type choice for accounts that never picked one */
+.feed .setup-panel { border-color: var(--accent); }
+.feed .setup-panel .stack { display: flex; flex-direction: column; gap: 12px; }
+.feed label.setup-choice { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border: 1px solid #e6d3cb; border-radius: 999px; background: #fff; cursor: pointer; }
+.feed label.setup-choice.on { border-color: var(--accent); background: var(--soft); }

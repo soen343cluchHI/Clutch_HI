@@ -16,7 +16,7 @@ export default function OperatorView({ tab, restaurants, orders, couriers, origi
   const attention = stalled.length + waiting.length;
 
   async function reset() {
-    if (window.confirm('Reset the whole simulation to its seeded state? All orders, ledger entries and courier positions are cleared.'))
+    if (window.confirm('Reset the simulation? Every restaurant (also in Firebase), order, ledger entry and courier position is deleted. Accounts are kept, and restaurant owners can create their restaurant again.'))
       await act('RESET_SYSTEM');
   }
 

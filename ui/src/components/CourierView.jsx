@@ -10,8 +10,20 @@ const statusText = {
   CARRYING: 'Delivering an order',
 };
 
-export default function CourierView({ tab, courier, offer: polledOffer, restaurants, couriers, orders, origin, ledger, disabled, money, act }) {
-  if (!courier) return <p className="empty-note">Loading your courier profile…</p>;
+export default function CourierView({ tab, courier, offer: polledOffer, restaurants, couriers, orders, origin, ledger, loaded, disabled, money, act }) {
+  if (!courier && !loaded) return <p className="empty-note">Loading your courier profile…</p>;
+  // A courier account whose server cannot answer COURIER_STATUS (for example an outdated backend still running).
+  if (!courier)
+    return (
+      <section className="panel narrow">
+        <h2>Courier tools are unavailable</h2>
+        <p className="muted">
+          This server did not return a courier profile for your account. It is probably an older copy of the app that is
+          still running. Stop every running copy, start the app again with <code>npm run dev</code>, and open the address it
+          prints.
+        </p>
+      </section>
+    );
   // Only trust the offer if it is the order this courier holds right now (it can change between refreshes).
   const offer = polledOffer && polledOffer.id === courier.orderId ? polledOffer : null;
   const me = couriers.find((c) => c.mine) || { ...courier, arrivesInMs: 0 };

@@ -9,6 +9,7 @@ import DashboardPage from './pages/DashboardPage';
 import StatusPage from './pages/StatusPage';
 import VerifyEmailPage from './pages/VerifyEmailPage';
 import { registerAccount } from './services/dashboardApi';
+import { friendlyError } from './services/authErrors';
 import '@fontsource-variable/geist';
 import '@fontsource-variable/fraunces/full-italic.css';
 import './styles/theme.css';
@@ -21,12 +22,10 @@ function readSignupDraft(uid) {
   } catch { return null; }
 }
 
-function signupError(failure) {
-  if (/permission.?denied/i.test(`${failure.code || ''} ${failure.message || ''}`)) {
-    return 'Your account details could not be saved because access was denied. Please retry or contact the project administrator.';
-  }
-  return failure.message;
-}
+const signupError = friendlyError;
+
+// Marks a signed-in account that still has to choose its account type (shows the sign-up form, without a password).
+const CHOOSE_ACCOUNT_TYPE = 'choose-account-type';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -56,7 +55,7 @@ function App() {
     try {
       await signInWithEmailAndPassword(auth, account.email, account.password);
     } catch (failure) {
-      setError(failure.message);
+      setError(friendlyError(failure));
     } finally {
       setBusy(false);
     }
@@ -169,8 +168,10 @@ function App() {
   useEffect(() => {
     if (!user || loading || profile || profileError || savingSignup || signupFailure) return;
     // Recover interrupted signup automatically from its original details, without a second form.
-    setSavingSignup(true);
     const draft = readSignupDraft(user.uid);
+    // No saved details (for example a different browser): ask for the account type instead of guessing Customer.
+    if (!draft) { setSignupFailure(CHOOSE_ACCOUNT_TYPE); return; }
+    setSavingSignup(true);
     saveProfile(user, draft)
       .then(async () => {
         if (!user.emailVerified) { await sendEmailVerification(user); setVerificationSent(true); }
@@ -221,7 +222,7 @@ function App() {
     try {
       await signOut(auth);
     } catch (failure) {
-      setError(failure.message);
+      setError(friendlyError(failure));
     } finally {
       setBusy(false);
     }
@@ -236,7 +237,7 @@ function App() {
       await sendPasswordResetEmail(auth, email.trim());
       setResetSent(true);
     } catch (failure) {
-      setError(failure.message);
+      setError(friendlyError(failure));
     } finally {
       setBusy(false);
     }
@@ -252,7 +253,7 @@ function App() {
       await auth.currentUser.getIdToken(true);
       setVerified(true);
     } catch (failure) {
-      setError(failure.message);
+      setError(friendlyError(failure));
     } finally {
       setBusy(false);
     }
@@ -266,7 +267,7 @@ function App() {
       await sendEmailVerification(user);
       setVerificationSent(true);
     } catch (failure) {
-      setError(failure.message);
+      setError(friendlyError(failure));
     } finally {
       setBusy(false);
     }
@@ -283,7 +284,7 @@ function App() {
     } catch (failure) {
       setError(failure.code === 'auth/requires-recent-login'
         ? 'For security, sign out and sign in again before deleting your account.'
-        : failure.message);
+        : friendlyError(failure));
     } finally {
       setBusy(false);
     }
