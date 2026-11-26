@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
-import AddressPicker from './AddressPicker';
 import LiveMap, { secondsLeft } from './LiveMap';
+import CheckoutPanel from './CheckoutPanel';
 import MenuItemImage from './MenuItemImage';
 import OrderProgress, { stateLabel } from './OrderProgress';
 import RestaurantCover from './RestaurantCover';
-import { distanceKm, reverseAddress, toKm } from '../services/geo';
+import { reverseAddress, toKm } from '../services/geo';
 import { bandLabels, queueBand } from '../services/queueBand';
 
 const activeStates = ['Placed', 'Accepted', 'Preparing', 'Ready', 'PickedUp'];
@@ -239,7 +239,6 @@ export default function CustomerView({ tab, setTab, session, restaurants, orders
   function renderMenu() {
     const inCart = cart.restaurantId === open.id ? cart.items : {};
     const band = queueBand(open);
-    const restaurantPoint = { x: open.x, y: open.y };
     return (
       <div className="menu-layout">
         <section className="panel">
@@ -298,65 +297,22 @@ export default function CustomerView({ tab, setTab, session, restaurants, orders
             ))}
           </ul>
         </section>
-        <aside className="panel checkout">
-          <h3>Your order{cartRestaurant ? ` · ${cartRestaurant.name}` : ''}</h3>
-          {cartLines.map((item) => (
-            <div className="line" key={item.id}>
-              <span>
-                {cart.items[item.id]} × {item.name}
-              </span>
-              <span>{money(Number(item.price) * cart.items[item.id])}</span>
-            </div>
-          ))}
-          {!cartCount && <p className="muted">Your cart is empty.</p>}
-          <h4>Deliver to</h4>
-          <AddressPicker origin={origin} value={address} onChange={setAddress} disabled={disabled} />
-          <LiveMap
-            origin={origin}
-            className="map-checkout"
-            restaurants={[open]}
-            drops={address ? [{ id: 'home', ...address, short: 'You' }] : []}
-            onPick={disabled ? undefined : pickOnMap}
-            showLabels={false}
-            legend={false}
-          />
-          {address && <p className="hint">{distanceKm(restaurantPoint, address).toFixed(1)} km from {open.name} (straight line)</p>}
-          {quote && (
-            <div className="fare">
-              <div className="line">
-                <span>Subtotal</span>
-                <span>{money(quote.subtotal)}</span>
-              </div>
-              <div className="line">
-                <span>Delivery fee</span>
-                <span>{money(quote.deliveryFee)}</span>
-              </div>
-              <div className="line">
-                <span>Service fee</span>
-                <span>{money(quote.serviceFee)}</span>
-              </div>
-              {Number(quote.smallOrderSurcharge) > 0 && (
-                <div className="line warn">
-                  <span>Small-order surcharge (under {money(quote.smallOrderThreshold)})</span>
-                  <span>{money(quote.smallOrderSurcharge)}</span>
-                </div>
-              )}
-              <div className="line total">
-                <span>Total</span>
-                <span>{money(quote.total)}</span>
-              </div>
-            </div>
-          )}
-          <button className="f-btn primary block" disabled={disabled || Boolean(blocker)} onClick={placeOrder}>
-            Place order{quote && !blocker ? ` · ${money(quote.total)}` : ''}
-          </button>
-          {blocker && <p className="hint reason">{blocker}</p>}
-          {cartCount > 0 && (
-            <button type="button" className="link-button" disabled={disabled} onClick={() => setCart(emptyCart)}>
-              Clear cart
-            </button>
-          )}
-        </aside>
+        <CheckoutPanel
+          restaurant={open}
+          cart={cart}
+          cartLines={cartLines}
+          cartCount={cartCount}
+          address={address}
+          onAddressChange={setAddress}
+          quote={quote}
+          disabled={disabled}
+          blocker={blocker}
+          money={money}
+          origin={origin}
+          onPick={pickOnMap}
+          onPlace={placeOrder}
+          onClear={() => setCart(emptyCart)}
+        />
       </div>
     );
   }
