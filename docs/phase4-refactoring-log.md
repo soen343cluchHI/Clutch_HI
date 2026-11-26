@@ -1,0 +1,11 @@
+# Phase IV refactoring log
+
+## R1 — `ApiServer.handle()`
+
+**Target.** `backend/src/sugarrush/presentation/http/ApiServer.java`, method `handle()`. The method exhibits **Long Method**: it handles HTTP validation, Firebase authentication, form parsing, command construction, execution, persistence, and response mapping in one flow. The extracted command construction prepares the shared HTTP command entry point for **NTF, RVW, or PROMO**, whichever optional module the team selects. Each would need a command accepted and translated at this boundary. This refactoring adds no module behavior.
+
+**Prompt.** Tool: OpenAI Codex; model: GPT-6. In this conversation the user asked: “ok lets start by changing APIsERVER.HANDLE(). write a test that must pass bvefore the refactor.” After that test passed, the user asked: “ok go ahead adn refactor and after that make sure the test passes. After the test passes write a refactorign log” and “do this only if the test pass”. The proposal already under review in the conversation was: “Extract command parsing and construction into a focused method or class. Keep the current validation, authorization, response codes, and Firebase save order.”
+
+**Proposal.** Apply **Extract Method** to the form-field parsing and action-to-command conversion. `parseFields()` collects `item.*` quantities and `profile.*` fields into a small `ParsedFields` record; `command()` converts an `Action` and its fields into the existing `Command`. `handle()` retains authentication, Firebase synchronization, execution, persistence, and HTTP response handling.
+
+**Verdict.** **Accepted.** The extracted code keeps the original action switch and field rules. Field parsing still happens before Firebase retry/profile loading; command construction still happens afterward. I reviewed the diff for that ordering and for unchanged response/error handling. `ApiHandleCharacterization` passed all **20 checks** both before and after the change, covering route responses, authentication, command parsing, order creation, authorization, and profile fields. The full `backend/check.ps1` suite also passed before and after. The five SonarQube regex findings in `ApiServer.java` are separate from this refactoring and are not claimed as fixed.

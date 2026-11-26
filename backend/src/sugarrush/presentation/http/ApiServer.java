@@ -189,47 +189,11 @@ public final class ApiServer {
                 return;
             }
             Action action = Action.valueOf(required(fields, "action"));
-            Map<String, Integer> items = new LinkedHashMap<>();
-            Map<String, String> profile = new LinkedHashMap<>();
-            for (var entry : fields.entrySet()) {
-                if (entry.getKey().startsWith("item.")) {
-                    items.put(entry.getKey().substring(5), Integer.valueOf(entry.getValue()));
-                }
-                if (entry.getKey().startsWith("profile.")) {
-                    profile.put(entry.getKey().substring(8), entry.getValue());
-                }
-            }
+            ParsedFields parsed = parseFields(fields);
             if (remoteRestaurants) retryUnsavedRestaurants(identity.uid(), session.user().role(), firebaseToken);
             if (remoteRestaurants && (action == Action.VIEW_PROFILE || action == Action.UPDATE_PROFILE))
                 loadProfile(identity.uid(), session.user().id(), firebaseToken);
-            Command command = switch (action) {
-            case CREATE_RESTAURANT -> new Command(token, action, null, null, null, required(fields, "name"), null, null);
-            case PUT_MENU_ITEM -> new Command(token, action, required(fields, "restaurantId"), null, null, null, null,
-                    new MenuItem(required(fields, "itemId"), required(fields, "name"),
-                            new BigDecimal(required(fields, "price")), MenuItem.Status.valueOf(required(fields, "itemStatus")),
-                            fields.get("description"), fields.get("imageUrl")));
-            case DELETE_MENU_ITEM -> new Command(token, action, required(fields, "restaurantId"), null, null,
-                    required(fields, "itemId"), null, null);
-            case SET_RESTAURANT_LOCATION -> new Command(token, action, required(fields, "restaurantId"), null, null, null,
-                    null, null, Map.of("address", required(fields, "address"), "addressX", required(fields, "addressX"),
-                            "addressY", required(fields, "addressY")));
-            case RESTAURANT_QUEUE ->
-                new Command(token, action, required(fields, "restaurantId"), null, null, null, null, null);
-            case SET_RESTAURANT_STATUS -> new Command(token, action, required(fields, "restaurantId"), null, null, null,
-                    Restaurant.Status.valueOf(required(fields, "status")), null);
-
-            case PLACE_ORDER -> Command.place(token, required(fields, "restaurantId"), items, Map.of(
-                    "address", required(fields, "address"), "addressX", required(fields, "addressX"),
-                    "addressY", required(fields, "addressY")));
-            case PRICE_QUOTE -> new Command(token, action, required(fields, "restaurantId"), null, items, null, null, null);
-            case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY, ACCEPT_DELIVERY_OFFER, CONFIRM_PICKUP, CONFIRM_DELIVERY, REASSIGN_ORDER, VIEW_ORDER_SUMMARY, REFUND_ORDER -> // Dashboard can send commands to backend through APi
-                Command.order(token, action, required(fields, "orderId"), fields.get("reason"));        // The commands requests ertrival of summaries
-            case UPDATE_PROFILE -> Command.profile(token, profile);
-            case BROWSE_RESTAURANTS, LIST_ORDERS, SESSION_INFO, ROLE_MENU, LOGOUT, DASHBOARD, EVENT_LOG, COMMAND_LOG, LIST_LEDGER, VIEW_PROFILE, COURIER_OFFER, COURIER_STATUS, GO_ON_DUTY, GO_OFF_DUTY, CITY_MAP, RESET_SYSTEM ->
-                new Command(token, action);
-            default -> throw new IllegalArgumentException("This endpoint does not support that command yet");
-
-            };
+            Command command = command(token, action, fields, parsed);
             if (remoteRestaurants && action == Action.RESET_SYSTEM) {
                 // Check the role before deleting anything in Firebase; the command chain checks it again below.
                 if (!action.permits(session.user().role()))
@@ -277,6 +241,54 @@ public final class ApiServer {
         } finally {
             exchange.close();
         }
+    }
+
+    private record ParsedFields(Map<String, Integer> items, Map<String, String> profile) {
+    }
+
+    private static ParsedFields parseFields(Map<String, String> fields) {
+        Map<String, Integer> items = new LinkedHashMap<>();
+        Map<String, String> profile = new LinkedHashMap<>();
+        for (var entry : fields.entrySet()) {
+            if (entry.getKey().startsWith("item.")) {
+                items.put(entry.getKey().substring(5), Integer.valueOf(entry.getValue()));
+            }
+            if (entry.getKey().startsWith("profile.")) {
+                profile.put(entry.getKey().substring(8), entry.getValue());
+            }
+        }
+        return new ParsedFields(items, profile);
+    }
+
+    private static Command command(String token, Action action, Map<String, String> fields, ParsedFields parsed) {
+        return switch (action) {
+            case CREATE_RESTAURANT -> new Command(token, action, null, null, null, required(fields, "name"), null, null);
+            case PUT_MENU_ITEM -> new Command(token, action, required(fields, "restaurantId"), null, null, null, null,
+                    new MenuItem(required(fields, "itemId"), required(fields, "name"),
+                            new BigDecimal(required(fields, "price")), MenuItem.Status.valueOf(required(fields, "itemStatus")),
+                            fields.get("description"), fields.get("imageUrl")));
+            case DELETE_MENU_ITEM -> new Command(token, action, required(fields, "restaurantId"), null, null,
+                    required(fields, "itemId"), null, null);
+            case SET_RESTAURANT_LOCATION -> new Command(token, action, required(fields, "restaurantId"), null, null, null,
+                    null, null, Map.of("address", required(fields, "address"), "addressX", required(fields, "addressX"),
+                            "addressY", required(fields, "addressY")));
+            case RESTAURANT_QUEUE ->
+                new Command(token, action, required(fields, "restaurantId"), null, null, null, null, null);
+            case SET_RESTAURANT_STATUS -> new Command(token, action, required(fields, "restaurantId"), null, null, null,
+                    Restaurant.Status.valueOf(required(fields, "status")), null);
+
+            case PLACE_ORDER -> Command.place(token, required(fields, "restaurantId"), parsed.items(), Map.of(
+                    "address", required(fields, "address"), "addressX", required(fields, "addressX"),
+                    "addressY", required(fields, "addressY")));
+            case PRICE_QUOTE -> new Command(token, action, required(fields, "restaurantId"), null, parsed.items(), null, null, null);
+            case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY, ACCEPT_DELIVERY_OFFER, CONFIRM_PICKUP, CONFIRM_DELIVERY, REASSIGN_ORDER, VIEW_ORDER_SUMMARY, REFUND_ORDER ->
+                Command.order(token, action, required(fields, "orderId"), fields.get("reason"));
+            case UPDATE_PROFILE -> Command.profile(token, parsed.profile());
+            case BROWSE_RESTAURANTS, LIST_ORDERS, SESSION_INFO, ROLE_MENU, LOGOUT, DASHBOARD, EVENT_LOG, COMMAND_LOG, LIST_LEDGER, VIEW_PROFILE, COURIER_OFFER, COURIER_STATUS, GO_ON_DUTY, GO_OFF_DUTY, CITY_MAP, RESET_SYSTEM ->
+                new Command(token, action);
+            default -> throw new IllegalArgumentException("This endpoint does not support that command yet");
+
+        };
     }
 
     // Records the account type chosen at sign-up and, for restaurant accounts, opens their first restaurant.
