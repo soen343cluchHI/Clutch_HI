@@ -14,6 +14,7 @@ import sugarrush.application.dispatch.DispatchService;
 import sugarrush.application.map.CityMapService;
 import sugarrush.application.order.OrderService;
 import sugarrush.application.pricing.PricingService;
+import sugarrush.application.promo.PromoService;
 import sugarrush.application.profile.ProfileService;
 import sugarrush.application.restaurant.RestaurantService;
 import sugarrush.domain.restaurant.Restaurant;
@@ -69,7 +70,7 @@ public final class SugarRush {
         publisher = new OrderEventPublisher();
         log = new CommandLog();
         double kmPerSecond = number(config, "simulation.courierKmPerSecond", 0);
-        orders = new OrderService(restaurants, publisher, new PricingService(config));
+        orders = new OrderService(restaurants, publisher, new PricingService(config), new PromoService(config));
         couriers = new CourierService(orders, Clock.systemUTC(), kmPerSecond);
         DispatchService dispatch = new DispatchService(orders, couriers, restaurants);
         orders.onReady(dispatch::onOrderReady);
@@ -107,7 +108,7 @@ public final class SugarRush {
         }
     }
 
-    // Settings only (pricing, map, simulation); restaurants and accounts come from Firebase.
+    //Settings come from config; accounts and restaurants come from Firebase.
     public static SugarRush fromConfig(Path path) throws IOException {
         Properties properties = new Properties();
         try (Reader reader = Files.newBufferedReader(path)) {

@@ -277,10 +277,10 @@ public final class ApiServer {
             case SET_RESTAURANT_STATUS -> new Command(token, action, required(fields, "restaurantId"), null, null, null,
                     Restaurant.Status.valueOf(required(fields, "status")), null);
 
-            case PLACE_ORDER -> Command.place(token, required(fields, "restaurantId"), parsed.items(), Map.of(
-                    "address", required(fields, "address"), "addressX", required(fields, "addressX"),
-                    "addressY", required(fields, "addressY")));
-            case PRICE_QUOTE -> new Command(token, action, required(fields, "restaurantId"), null, parsed.items(), null, null, null);
+            case PLACE_ORDER -> Command.place(token, required(fields, "restaurantId"), parsed.items(),
+                    checkoutFields(fields));
+            case PRICE_QUOTE -> new Command(token, action, required(fields, "restaurantId"), null,
+                    parsed.items(), null, null, null, promoFields(fields));
             case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER, START_PREPARING, MARK_READY, ACCEPT_DELIVERY_OFFER, CONFIRM_PICKUP, CONFIRM_DELIVERY, REASSIGN_ORDER, VIEW_ORDER_SUMMARY, REFUND_ORDER ->
                 Command.order(token, action, required(fields, "orderId"), fields.get("reason"));
             case UPDATE_PROFILE -> Command.profile(token, parsed.profile());
@@ -289,6 +289,19 @@ public final class ApiServer {
             default -> throw new IllegalArgumentException("This endpoint does not support that command yet");
 
         };
+    }
+
+    private static Map<String, String> promoFields(Map<String, String> fields) {
+        String code = fields.get("promoCode");
+        return code == null || code.isBlank() ? Map.of() : Map.of("promoCode", code);
+    }
+
+    private static Map<String, String> checkoutFields(Map<String, String> fields) {
+        Map<String, String> values = new LinkedHashMap<>(promoFields(fields));
+        values.put("address", required(fields, "address"));
+        values.put("addressX", required(fields, "addressX"));
+        values.put("addressY", required(fields, "addressY"));
+        return values;
     }
 
     // Records the account type chosen at sign-up and, for restaurant accounts, opens their first restaurant.

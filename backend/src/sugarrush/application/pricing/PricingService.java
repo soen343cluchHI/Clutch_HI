@@ -9,7 +9,8 @@ import sugarrush.domain.pricing.*;
 public final class PricingService {
     // Fare breakdown shown before checkout; total always comes from the same strategies used to charge (R-PRC-01).
     public record Quote(BigDecimal subtotal, BigDecimal deliveryFee, BigDecimal serviceFee,
-            BigDecimal smallOrderSurcharge, BigDecimal smallOrderThreshold, BigDecimal total) {
+            BigDecimal smallOrderSurcharge, BigDecimal smallOrderThreshold, BigDecimal total,
+            String promoCode, BigDecimal promoDiscount) {
     }
 
     private final BigDecimal deliveryFee, serviceFee, surcharge;
@@ -39,7 +40,8 @@ public final class PricingService {
         BigDecimal total = calculate(subtotal);
         BigDecimal money = subtotal.setScale(2, RoundingMode.UNNECESSARY);
         BigDecimal applied = money.compareTo(smallOrderThreshold) < 0 ? surcharge : BigDecimal.ZERO.setScale(2);
-        return new Quote(money, deliveryFee, serviceFee, applied, smallOrderThreshold, total);
+        return new Quote(money, deliveryFee, serviceFee, applied, smallOrderThreshold, total,
+                "", BigDecimal.ZERO.setScale(2));
     }
 
     private static BigDecimal amount(Properties config, String key) {

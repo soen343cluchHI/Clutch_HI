@@ -37,6 +37,8 @@ export default function CustomerView({ tab, setTab, session, restaurants, orders
   const [cart, setCart] = useState(emptyCart);
   const [address, setAddress] = useState(loadAddress);
   const [quote, setQuote] = useState(null);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoError, setPromoError] = useState('');
   const [summary, setSummary] = useState(null);
 
   const open = restaurants.find((r) => r.id === openId);
@@ -70,20 +72,27 @@ export default function CustomerView({ tab, setTab, session, restaurants, orders
   // The fare comes from the backend pricing rules, so the preview always matches the charge (R-PRC-01).
   const cartKey = JSON.stringify(cart);
   useEffect(() => {
+    setQuote(null);
+    setPromoError('');
     if (!cartCount || cartLines.some((item) => item.status !== 'AVAILABLE')) {
-      setQuote(null);
       return;
     }
     let current = true;
     const fields = { restaurantId: cart.restaurantId };
     cartLines.forEach((item) => (fields[`item.${item.id}`] = cart.items[item.id]));
+    if (promoCode.trim()) fields.promoCode = promoCode.trim();
     ask('PRICE_QUOTE', fields)
       .then((result) => current && setQuote(result))
-      .catch(() => current && setQuote(null));
+      .catch((failure) => {
+        if (current) {
+          setQuote(null);
+          if (promoCode.trim()) setPromoError(failure.message);
+        }
+      });
     return () => {
       current = false;
     };
-  }, [cartKey, restaurants]);
+  }, [cartKey, restaurants, promoCode]);
 
   function changeQuantity(restaurant, item, change) {
     if (cartCount > 0 && cart.restaurantId !== restaurant.id) {
@@ -98,9 +107,11 @@ export default function CustomerView({ tab, setTab, session, restaurants, orders
   async function placeOrder() {
     const fields = { restaurantId: cart.restaurantId, address: address.label, addressX: address.x, addressY: address.y };
     cartLines.forEach((item) => (fields[`item.${item.id}`] = cart.items[item.id]));
+    if (promoCode.trim()) fields.promoCode = promoCode.trim();
     const placed = await act('PLACE_ORDER', fields);
     if (placed) {
       setCart(emptyCart);
+      setPromoCode('');
       setOpenId('');
       setTab('Orders');
     }
@@ -305,13 +316,19 @@ export default function CustomerView({ tab, setTab, session, restaurants, orders
           address={address}
           onAddressChange={setAddress}
           quote={quote}
+          promoCode={promoCode}
+          onPromoChange={(value) => setPromoCode(value.toUpperCase())}
+          promoError={promoError}
           disabled={disabled}
           blocker={blocker}
           money={money}
           origin={origin}
           onPick={pickOnMap}
           onPlace={placeOrder}
-          onClear={() => setCart(emptyCart)}
+          onClear={() => {
+            setCart(emptyCart);
+            setPromoCode('');
+          }}
         />
       </div>
     );
@@ -370,6 +387,7 @@ export default function CustomerView({ tab, setTab, session, restaurants, orders
               <OrderProgress state={order.state} />
               <p className="track-eta">{eta(order)}</p>
               <p className="muted">Deliver to {order.deliveryAddress?.label}</p>
+              {order.promoCode && <p className="muted">Promo {order.promoCode} saved {money(order.promoDiscount)}</p>}
               <ul className="plain-list">
                 {order.lines.map((line) => (
                   <li key={line.item.id}>
@@ -444,6 +462,12 @@ export function SummaryCard({ summary, money, onClose }) {
         <span>Subtotal</span>
         <span>{money(summary.subtotal)}</span>
       </div>
+      {summary.promoCode && (
+        <div className="line">
+          <span>Promo {summary.promoCode}</span>
+          <span>−{money(summary.promoDiscount)}</span>
+        </div>
+      )}
       <div className="line total">
         <span>Total charged</span>
         <span>{money(summary.totalCharged)}</span>

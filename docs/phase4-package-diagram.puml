@@ -1,0 +1,51 @@
+@startuml
+title Phase IV package diagram with PROMO
+skinparam packageStyle rectangle
+skinparam shadowing false
+
+package "UI" {
+    package "ui/src/components" as UI {
+        class CustomerView
+        class CheckoutPanel
+    }
+    package "presentation.http" as HTTP {
+        class ApiServer
+    }
+}
+
+package "Application" {
+    package "application.commands" as Commands {
+        class ExecutionHandler
+    }
+    package "application.order" as Orders {
+        class OrderService
+    }
+    package "application.pricing" as Pricing {
+        class PricingService
+    }
+    package "application.promo" as Promo {
+        class PromoService
+    }
+}
+
+package "Domain" {
+    package "domain.order" as DomainOrder {
+        class Order
+    }
+}
+
+package "Configuration" {
+    rectangle "backend/config/app.properties" as Config
+}
+
+CustomerView --> CheckoutPanel
+CustomerView --> ApiServer : quote and place
+ApiServer --> ExecutionHandler : command
+ExecutionHandler --> OrderService
+OrderService --> PricingService : computed fare
+OrderService --> PromoService : validate and discount
+OrderService --> Order
+PromoService --> Config : code rules
+PricingService --> Config : fee rules
+
+@enduml

@@ -1,0 +1,34 @@
+@startuml
+title PROMO: Apply a code at checkout
+
+actor Customer
+participant "CustomerView / CheckoutPanel" as UI
+participant "ApiServer" as API
+participant "ExecutionHandler" as Commands
+participant "OrderService" as Orders
+participant "PromoService" as Promo
+participant "Dashboard / console" as Dashboard
+
+Customer -> UI: Enter code and place order
+UI -> API: PLACE_ORDER(cart, address, promoCode)
+API -> Commands: Command with promoCode
+Commands -> Orders: place(customer, cart, address, promoCode)
+Orders -> Orders: Compute item subtotal and fare
+Orders -> Promo: apply(subtotal, fare, code)
+
+alt Code expired or below minimum
+    Promo --> Orders: Refusal reason
+    Orders --> Commands: Refuse placement
+    Commands --> API: Error
+    API --> UI: Clear refusal message
+    UI -> Dashboard: Show refusal in console
+else Code valid
+    Promo --> Orders: Code, discount, final total
+    Orders -> Orders: Store order and applied amount
+    Orders --> Commands: Order view
+    Commands --> API: Order view
+    API --> UI: Discounted order total
+    UI -> Dashboard: Show order and total
+end
+
+@enduml

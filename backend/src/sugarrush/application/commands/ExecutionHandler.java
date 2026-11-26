@@ -54,8 +54,9 @@ public final class ExecutionHandler extends CommandHandler {
         case CREATE_RESTAURANT -> restaurants.create(user, c.reason());
         case LIST_ORDERS -> orders.visible(user);
         case VIEW_ORDER_SUMMARY -> orders.summary(c.orderId());// connects your new command to the summary retrieval method
-        case PLACE_ORDER -> orders.place(user, c.restaurantId(), c.items(), deliveryAddress(c.fields()));
-        case PRICE_QUOTE -> orders.quote(c.restaurantId(), c.items());
+        case PLACE_ORDER -> orders.place(user, c.restaurantId(), c.items(), deliveryAddress(c.fields()),
+                c.fields().get("promoCode"));
+        case PRICE_QUOTE -> orders.quote(c.restaurantId(), c.items(), c.fields().get("promoCode"));
         case CITY_MAP -> map.view(user);
         case RESET_SYSTEM -> "System reset to its initial state"; // SugarRush rebuilds the world after authorization passes
         case CANCEL_ORDER, ACCEPT_ORDER, REJECT_ORDER,

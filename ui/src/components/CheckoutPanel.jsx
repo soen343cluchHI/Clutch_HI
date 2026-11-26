@@ -3,8 +3,8 @@ import LiveMap from './LiveMap';
 import { distanceKm } from '../services/geo';
 
 export default function CheckoutPanel({
-  restaurant, cart, cartLines, cartCount, address, onAddressChange, quote, disabled,
-  blocker, money, origin, onPick, onPlace, onClear,
+  restaurant, cart, cartLines, cartCount, address, onAddressChange, quote, promoCode,
+  onPromoChange, promoError, disabled, blocker, money, origin, onPick, onPlace, onClear,
 }) {
   return (
     <aside className="panel checkout">
@@ -30,6 +30,18 @@ export default function CheckoutPanel({
         legend={false}
       />
       {address && <p className="hint">{distanceKm({ x: restaurant.x, y: restaurant.y }, address).toFixed(1)} km from {restaurant.name} (straight line)</p>}
+      <label className="promo-field">
+        <span>Promo code</span>
+        <input
+          type="text"
+          value={promoCode}
+          onChange={(event) => onPromoChange(event.target.value)}
+          placeholder="Enter a code"
+          maxLength={32}
+          disabled={disabled}
+        />
+      </label>
+      {promoError && <p className="hint reason" role="alert">{promoError}</p>}
       {quote && (
         <div className="fare">
           <div className="line">
@@ -48,6 +60,12 @@ export default function CheckoutPanel({
             <div className="line warn">
               <span>Small-order surcharge (under {money(quote.smallOrderThreshold)})</span>
               <span>{money(quote.smallOrderSurcharge)}</span>
+            </div>
+          )}
+          {quote.promoCode && (
+            <div className="line">
+              <span>Promo {quote.promoCode}</span>
+              <span>−{money(quote.promoDiscount)}</span>
             </div>
           )}
           <div className="line total">

@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.util.*;
 import sugarrush.application.events.OrderEventPublisher;
 import sugarrush.application.pricing.PricingService;
+import sugarrush.application.promo.PromoService;
 import sugarrush.application.restaurant.RestaurantService;
 import sugarrush.domain.order.*;
 import sugarrush.domain.restaurant.Restaurant;
@@ -15,7 +16,8 @@ import sugarrush.domain.courier.Courier;
 
 public final class OrderService {
     public record View(String id, String customerId, String restaurantId, List<OrderLine> lines, BigDecimal total,
-            String state, String rejectionReason, DeliveryAddress deliveryAddress) {
+            String state, String rejectionReason, DeliveryAddress deliveryAddress,
+            String promoCode, BigDecimal promoDiscount) {
     }
 
     //To define the info the summary of the order contains
@@ -26,7 +28,9 @@ public final class OrderService {
         List<OrderLine> lines,
         BigDecimal subtotal,
         BigDecimal totalCharged,
-        Instant deliveredAt) {
+        Instant deliveredAt,
+        String promoCode,
+        BigDecimal promoDiscount) {
 
         public Summary {
             lines = List.copyOf(lines);
@@ -36,10 +40,12 @@ public final class OrderService {
     private final Map<String, Set<String>> carriersByOrder = new HashMap<>(); //remembers which courier carried an order
     private final Map<String, Order> orders = new LinkedHashMap<>();
     private final Map<String, Summary> summaries = new LinkedHashMap<>();// store the summaries
+    private final Map<String, PromoService.Applied> promosByOrder = new HashMap<>();
     private final LedgerService ledger = new LedgerService(); //order service needs a ledger instance to record order activity
     private final RestaurantService restaurants;
     private final OrderEventPublisher publisher;
     private final PricingService pricing;
+    private final PromoService promo;
     private java.util.function.Consumer<String> readyHandler = id -> {};
 
     public void onReady(java.util.function.Consumer<String> handler) {
@@ -47,22 +53,34 @@ public final class OrderService {
     }
 
     public OrderService(RestaurantService restaurants, OrderEventPublisher publisher, PricingService pricing) {
+        this(restaurants, publisher, pricing, PromoService.disabled());
+    }
+
+    public OrderService(RestaurantService restaurants, OrderEventPublisher publisher, PricingService pricing,
+            PromoService promo) {
         this.restaurants = restaurants;
         this.publisher = publisher;
         this.pricing = pricing;
+        this.promo = promo;
     }
 
     public View place(User user, String restaurantId, Map<String, Integer> items) {
-        return place(user, restaurantId, items, null);
+        return place(user, restaurantId, items, null, null);
     }
 
     public View place(User user, String restaurantId, Map<String, Integer> items, DeliveryAddress address) {
+        return place(user, restaurantId, items, address, null);
+    }
+
+    public View place(User user, String restaurantId, Map<String, Integer> items, DeliveryAddress address,
+            String promoCode) {
         Restaurant r = restaurants.require(restaurantId);
         List<OrderLine> lines = lines(r, items);
         Order order = address == null ? new Order(UUID.randomUUID().toString(), user.id(), r, lines)
                 : new Order(UUID.randomUUID().toString(), user.id(), r, lines, address);
-        pricing.calculate(order.total());
+        PromoService.Applied applied = promo.apply(order.total(), pricing.calculate(order.total()), promoCode);
         orders.put(order.id(), order);
+        promosByOrder.put(order.id(), applied);
         OrderEvent event = order.placedEvent(); //every order gets a ledger entry when placed
         ledger.record(order, event, BigDecimal.ZERO.setScale(2)); //reuse the same event and timestamp as the existing event logger
         publisher.publish(event);
@@ -71,8 +89,18 @@ public final class OrderService {
 
     // Same subtotal and pricing rules as place(), so the checkout preview matches the charge.
     public PricingService.Quote quote(String restaurantId, Map<String, Integer> items) {
+        return quote(restaurantId, items, null);
+    }
+
+    public PricingService.Quote quote(String restaurantId, Map<String, Integer> items, String promoCode) {
         Restaurant r = restaurants.require(restaurantId);
-        return pricing.quote(lines(r, items).stream().map(OrderLine::total).reduce(BigDecimal.ZERO, BigDecimal::add));
+        BigDecimal subtotal = lines(r, items).stream().map(OrderLine::total)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        PricingService.Quote base = pricing.quote(subtotal);
+        PromoService.Applied applied = promo.apply(subtotal, base.total(), promoCode);
+        return new PricingService.Quote(base.subtotal(), base.deliveryFee(), base.serviceFee(),
+                base.smallOrderSurcharge(), base.smallOrderThreshold(), applied.total(),
+                applied.code(), applied.discount());
     }
 
     private static List<OrderLine> lines(Restaurant r, Map<String, Integer> items) {
@@ -177,7 +205,7 @@ public final class OrderService {
         }
         case "CONFIRM_PICKUP" -> event = order.pickUp();
         case "CONFIRM_DELIVERY" -> {                        //items subtotal
-            BigDecimal totalCharged = pricing.calculate(order.total());//provides the total including the fees
+            PromoService.Applied applied = promoFor(order);
             event = order.deliver(); //Summary saved when this succeeds                       
             summaries.put(id, new Summary(
                     order.id(),
@@ -185,8 +213,10 @@ public final class OrderService {
                     r.name(),
                     order.lines(),
                     order.total(),
-                    totalCharged,
-                    event.timestamp()));
+                    applied.total(),
+                    event.timestamp(),
+                    applied.code(),
+                    applied.discount()));
         }
         default -> throw new IllegalArgumentException("Unknown order action");
         }//every successful transition is recorded
@@ -209,8 +239,14 @@ public final class OrderService {
     }
 
     public View view(Order o) {
-        return new View(o.id(), o.customerId(), o.restaurantId(), o.lines(), pricing.calculate(o.total()), o.state(), o.rejectionReason(),
-                o.deliveryAddress());
+        PromoService.Applied applied = promoFor(o);
+        return new View(o.id(), o.customerId(), o.restaurantId(), o.lines(), applied.total(), o.state(),
+                o.rejectionReason(), o.deliveryAddress(), applied.code(), applied.discount());
+    }
+
+    private PromoService.Applied promoFor(Order order) {
+        PromoService.Applied applied = promosByOrder.get(order.id());
+        return applied == null ? promo.apply(order.total(), pricing.calculate(order.total()), null) : applied;
     }
 
     public Summary summary(String orderId) {

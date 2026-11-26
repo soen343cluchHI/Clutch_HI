@@ -230,6 +230,8 @@
 .line.warn { color: #9a6309; }
 .line.total { padding-top: 10px; border-top: 1px solid var(--line); font-size: 17px; font-weight: 750; }
 .fare { display: grid; gap: 6px; padding: 14px; background: #fff7f2; border-radius: 14px; }
+.promo-field { display: grid; gap: 6px; font-size: 13px; font-weight: 650; }
+.promo-field input { width: 100%; }
 .address-picker { display: grid; gap: 8px; }
 .address-search { display: flex; gap: 8px; }
 .address-search input { flex: 1; }
