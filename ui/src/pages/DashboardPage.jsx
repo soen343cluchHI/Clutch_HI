@@ -214,7 +214,7 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
               <button type="button" role="menuitem" disabled={disabled} onClick={signOut}>
                 Sign out
               </button>
-              {!confirmDelete ? (
+              {onDeleteAccount && (!confirmDelete ? (
                 <button type="button" role="menuitem" className="danger-text" disabled={disabled} onClick={() => setConfirmDelete(true)}>
                   Delete account
                 </button>
@@ -231,7 +231,7 @@ export default function DashboardPage({ firebaseUser, onLogout, onDeleteAccount,
                     </button>
                   </div>
                 </div>
-              )}
+              ))}
             </div>
           )}
         </div>

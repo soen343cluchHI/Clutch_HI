@@ -27,6 +27,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "API handle characterization checks failed" }
     & java --add-modules jdk.httpserver -cp $outputPath sugarrush.presentation.http.FirebaseStoreChecks
     if ($LASTEXITCODE -ne 0) { throw "Firebase storage checks failed" }
+    & java --add-modules jdk.httpserver -cp $outputPath sugarrush.presentation.http.DemoModeChecks
+    if ($LASTEXITCODE -ne 0) { throw "Demo mode checks failed" }
 } finally {
     Pop-Location
 }

@@ -1,0 +1,36 @@
+{
+    "restaurants":  [
+                        {
+                            "id":  "demo-restaurant-1",
+                            "name":  "Demo Kitchen",
+                            "status":  "OPEN",
+                            "menu":  [
+                                         {
+                                             "id":  "item-1-1",
+                                             "name":  "Monkey Cake",
+                                             "price":  "5.83",
+                                             "status":  "AVAILABLE"
+                                         }
+                                     ]
+                        },
+                        {
+                            "id":  "demo-restaurant-2",
+                            "name":  "Demo Cafe",
+                            "status":  "OPEN",
+                            "menu":  [
+                                         {
+                                             "id":  "item-2-1",
+                                             "name":  "a1",
+                                             "price":  "5",
+                                             "status":  "AVAILABLE"
+                                         },
+                                         {
+                                             "id":  "item-2-2",
+                                             "name":  "a2",
+                                             "price":  "13",
+                                             "status":  "AVAILABLE"
+                                         }
+                                     ]
+                        }
+                    ]
+}

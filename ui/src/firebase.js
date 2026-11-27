@@ -3,12 +3,13 @@ import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 
 const databaseURL = import.meta.env.VITE_FIREBASE_DATABASE_URL?.trim();
-export const configurationError = databaseURL
+const apiKey = import.meta.env.VITE_FIREBASE_API_KEY?.trim();
+export const configurationError = databaseURL && apiKey
   ? ''
-  : 'Set VITE_FIREBASE_DATABASE_URL in ui/.env.local for local development or ui/.env.production for a production build, then rebuild the app.';
+  : 'Set VITE_FIREBASE_API_KEY and VITE_FIREBASE_DATABASE_URL for the build, then rebuild the app.';
 
 const app = initializeApp({
-  apiKey: 'AIzaSyAn3ig9__1Z9xSCxNFTGwlrCHSp16OAsuE',
+  apiKey: apiKey || '',
   authDomain: 'soen343-f701c.firebaseapp.com',
   projectId: 'soen343-f701c',
   storageBucket: 'soen343-f701c.firebasestorage.app',

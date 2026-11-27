@@ -6,6 +6,6 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: SUGARRUSH_DATABASE_URL
-        value: https://soen343-f701c-default-rtdb.firebaseio.com
+        sync: false
       - key: SUGARRUSH_ALLOWED_ORIGIN
         value: https://soen343-f701c.web.app

@@ -1,0 +1,32 @@
+x-demo: { web: ui, port: 80 }
+
+services:
+  ui:
+    image: ghcr.io/soen343cluchhi/clutch_hi-ui:0123456789abcdef0123456789abcdef01234567
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    image: ghcr.io/soen343cluchhi/clutch_hi-backend:0123456789abcdef0123456789abcdef01234567
+    environment:
+      DEMO_MODE: "true"
+      DEMO_DATA_FILE: data/restaurants.properties
+      PORT: "8080"
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=50
+    volumes:
+      - demodata:/app/data
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/127.0.0.1/8080'"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
+volumes:
+  demodata:

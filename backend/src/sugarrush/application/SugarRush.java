@@ -36,6 +36,8 @@ public final class SugarRush {
     private CommandProcessor commands;
     private final Map<String, Session> firebaseSessions = new HashMap<>();
     private final FirebaseRegistrationService firebaseRegistrations = new FirebaseRegistrationService();
+    private Path demoRestaurantStore;
+    private final Map<Role, User> demoAccounts = new EnumMap<>(Role.class);
 
     public synchronized FirebaseRegistrationService.Enrollment enrollment(String uid) {
         return firebaseRegistrations.find(uid);
@@ -87,7 +89,14 @@ public final class SugarRush {
     // Deletes every restaurant, order, ledger entry and log; accounts and sessions stay signed in and
     // signed-in couriers start again off duty.
     private void reset() {
+        if (demoRestaurantStore != null) restaurants.clear();
         buildWorld();
+        if (demoRestaurantStore != null) {
+            try { restaurants.useStore(demoRestaurantStore); }
+            catch (IOException failure) { throw new IllegalStateException("Could not reopen demo restaurant store", failure); }
+        }
+        User demoCourier = demoAccounts.get(Role.COURIER);
+        if (demoCourier != null) couriers.provision(demoCourier);
         for (Session session : firebaseSessions.values()) {
             try {
                 User user = authentication.verify(session.token());
@@ -123,6 +132,18 @@ public final class SugarRush {
         User user = registration.register(username, password, roles);
         if (user.role() == Role.COURIER) couriers.provision(user);
         return user;
+    }
+
+    public synchronized User provisionDemoAccount(String username, String password, Role role) {
+        User user = registration.registerWithId("demo:" + role.name().toLowerCase(Locale.ROOT), username, password, List.of(role));
+        demoAccounts.put(role, user);
+        if (role == Role.COURIER) couriers.provision(user);
+        return user;
+    }
+
+    public synchronized void useDemoRestaurantStore(Path path) throws IOException {
+        demoRestaurantStore = path;
+        restaurants.useStore(path);
     }
 
     public synchronized Session login(String username, String password) {

@@ -35,6 +35,7 @@ public final class ApiServer {
     private final FirebaseTokenVerifier verifier;
     private final HttpClient http = HttpClient.newHttpClient();
     private final String databaseUrl;
+    private final boolean demoMode;
     // When true, restaurants, sign-up roles and profiles are read from and saved to the Firebase Realtime Database.
     private final boolean remoteRestaurants;
     private static final java.time.Duration FIREBASE_TIMEOUT = java.time.Duration.ofSeconds(10);
@@ -53,12 +54,17 @@ public final class ApiServer {
     }
 
     ApiServer(SugarRush application, FirebaseTokenVerifier verifier, String databaseUrl, boolean remoteRestaurants) {
+        this(application, verifier, databaseUrl, remoteRestaurants, false);
+    }
+
+    ApiServer(SugarRush application, FirebaseTokenVerifier verifier, String databaseUrl, boolean remoteRestaurants, boolean demoMode) {
         if (remoteRestaurants && (databaseUrl == null || databaseUrl.isBlank()))
             throw new IllegalStateException("Firebase database URL required");
         this.application = application;
         this.verifier = verifier;
         this.databaseUrl = databaseUrl;
         this.remoteRestaurants = remoteRestaurants;
+        this.demoMode = demoMode;
     }
 
     private static Set<String> allowedOrigins() {
@@ -81,11 +87,34 @@ public final class ApiServer {
 
         String projectId = settings.getProperty("firebase.projectId", "soen343-f701c").trim();
         SugarRush application = SugarRush.fromConfig(config);
-        // Firebase is the only data store, locally and when deployed.
-        ApiServer api = new ApiServer(application, new FirebaseTokenVerifier(projectId), databaseUrl(), true);
+        boolean demoMode = Boolean.parseBoolean(System.getenv().getOrDefault("DEMO_MODE", "false"));
+        if (demoMode) {
+            for (Role role : Role.values())
+                application.provisionDemoAccount(role.name().toLowerCase(Locale.ROOT) + "@demo.local", "demo1234", role);
+            Path store = Path.of(System.getenv().getOrDefault("DEMO_DATA_FILE", "data/restaurants.properties"));
+            boolean emptyStore = !Files.exists(store);
+            application.useDemoRestaurantStore(store);
+            if (emptyStore) seedDemoRestaurants(application, Path.of("demo/seed.json"));
+        }
+        ApiServer api = new ApiServer(application, new FirebaseTokenVerifier(projectId),
+                demoMode ? null : databaseUrl(), !demoMode, demoMode);
         HttpServer server = api.start(port);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> server.stop(0)));
         System.out.println("SugarRush backend: http://localhost:" + port);
+    }
+
+    static void seedDemoRestaurants(SugarRush application, Path seed) throws IOException {
+        Object entries = Json.object(Files.readString(seed)).get("restaurants");
+        if (!(entries instanceof List<?> restaurants)) throw new IllegalArgumentException("Demo seed needs restaurants");
+        for (Object raw : restaurants) {
+            if (!(raw instanceof Map<?, ?> record)) throw new IllegalArgumentException("Invalid demo restaurant");
+            Map<String, Object> data = new LinkedHashMap<>();
+            record.forEach((key, value) -> data.put(String.valueOf(key), value));
+            data.put("ownerId", "demo:restaurant");
+            data.put("x", 0);
+            data.put("y", 0);
+            application.importRestaurant(decodeRestaurant(String.valueOf(data.get("id")), data));
+        }
     }
 
     private static String databaseUrl() throws IOException {
@@ -134,7 +163,13 @@ public final class ApiServer {
                 send(exchange, 200, Map.of("status", "UP", "service", "SugarRush backend"));
                 return;
             }
-            if (!path.equals("/api/firebase-session") && !path.equals("/api/command") && !path.equals("/api/register-account")) {
+            if (path.equals("/api/mode")) {
+                if (!method(exchange, "GET")) return;
+                send(exchange, 200, Map.of("demo", demoMode));
+                return;
+            }
+            if (!path.equals("/api/firebase-session") && !path.equals("/api/command")
+                    && !path.equals("/api/register-account") && !(demoMode && path.equals("/api/demo-login"))) {
                 send(exchange, 404, Map.of("error", "Endpoint not found"));
                 return;
             }
@@ -155,6 +190,10 @@ public final class ApiServer {
 
             Map<String, String> fields = form(new String(body, StandardCharsets.UTF_8));
             String authorization = exchange.getRequestHeaders().getFirst("Authorization");
+            if (demoMode) {
+                handleDemo(exchange, path, fields, authorization);
+                return;
+            }
             FirebaseTokenVerifier.Identity identity;
             try {
                 if (authorization == null || !authorization.startsWith("Bearer ")) {
@@ -241,6 +280,38 @@ public final class ApiServer {
         } finally {
             exchange.close();
         }
+    }
+
+    private void handleDemo(HttpExchange exchange, String path, Map<String, String> fields, String authorization)
+            throws IOException {
+        if (path.equals("/api/demo-login")) {
+            try {
+                Session session = application.login(required(fields, "username"), required(fields, "password"));
+                send(exchange, 200, Map.of("token", session.token(), "username", session.user().username(),
+                        "role", session.user().role()));
+            } catch (SecurityException failure) {
+                send(exchange, 401, Map.of("error", message(failure)));
+            }
+            return;
+        }
+        if (path.equals("/api/register-account")) {
+            send(exchange, 404, Map.of("error", "Demo accounts are preconfigured"));
+            return;
+        }
+        String token = authorization != null && authorization.startsWith("Bearer ") ? authorization.substring(7) : "";
+        sugarrush.domain.user.User user;
+        try {
+            user = (sugarrush.domain.user.User) application.execute(new Command(token, Action.SESSION_INFO));
+        } catch (SecurityException failure) {
+            send(exchange, 401, Map.of("error", "Sign in required"));
+            return;
+        }
+        if (path.equals("/api/firebase-session")) {
+            send(exchange, 200, Map.of("id", user.id(), "username", user.username(), "role", user.role(), "enrolled", true));
+            return;
+        }
+        Action action = Action.valueOf(required(fields, "action"));
+        send(exchange, 200, application.execute(command(token, action, fields, parseFields(fields))));
     }
 
     private record ParsedFields(Map<String, Integer> items, Map<String, String> profile) {

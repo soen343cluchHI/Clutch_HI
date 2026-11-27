@@ -148,7 +148,12 @@ public final class RestaurantService {
 
     public void importIfAbsent(Restaurant restaurant) {
         // Demo fixtures can also exist in the remote store; keep the current seed owner.
-        restaurants.putIfAbsent(restaurant.id(), restaurant);
+        if (restaurants.putIfAbsent(restaurant.id(), restaurant) == null) save();
+    }
+
+    public void clear() {
+        restaurants.clear();
+        save();
     }
 
     // Undoes a creation whose remote save failed, so a retry starts clean.

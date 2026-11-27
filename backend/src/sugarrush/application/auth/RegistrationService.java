@@ -13,6 +13,10 @@ public final class RegistrationService {
     private final Map<String, Credential> accounts = new LinkedHashMap<>();
 
     public User register(String username, String password, Collection<Role> roles) {
+        return registerWithId(UUID.randomUUID().toString(), username, password, roles);
+    }
+
+    public User registerWithId(String id, String username, String password, Collection<Role> roles) {
         if (roles == null || roles.size() != 1 || roles.iterator().next() == null)
             throw new IllegalArgumentException("Select exactly one role");
 
@@ -24,7 +28,7 @@ public final class RegistrationService {
         if (accounts.containsKey(key))
             throw new IllegalArgumentException("Username already registered");
 
-        User user = new User(UUID.randomUUID().toString(), username.trim(), roles.iterator().next());
+        User user = new User(id, username.trim(), roles.iterator().next());
         byte[] salt = new byte[16];
 
         new SecureRandom().nextBytes(salt);
