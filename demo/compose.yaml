@@ -2,7 +2,7 @@ x-demo: { web: ui, port: 80 }
 
 services:
   ui:
-    image: ghcr.io/soen343cluchhi/clutch_hi-ui:0123456789abcdef0123456789abcdef01234567
+    image: ghcr.io/soen343cluchhi/clutch_hi-ui:c00c754a8e8f0580740e42ebc9f48896e81bbdae
     depends_on:
       backend:
         condition: service_healthy
@@ -13,7 +13,7 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/soen343cluchhi/clutch_hi-backend:0123456789abcdef0123456789abcdef01234567
+    image: ghcr.io/soen343cluchhi/clutch_hi-backend:c00c754a8e8f0580740e42ebc9f48896e81bbdae
     environment:
       DEMO_MODE: "true"
       DEMO_DATA_FILE: data/restaurants.properties
