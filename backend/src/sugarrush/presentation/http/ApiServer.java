@@ -92,6 +92,7 @@ public final class ApiServer {
             for (Role role : Role.values())
                 application.provisionDemoAccount(role.name().toLowerCase(Locale.ROOT) + "@demo.local", "demo1234", role);
             Path store = Path.of(System.getenv().getOrDefault("DEMO_DATA_FILE", "data/restaurants.properties"));
+            application.useDemoAccountStore(store.resolveSibling("accounts.properties"));
             boolean emptyStore = !Files.exists(store);
             application.useDemoRestaurantStore(store);
             if (emptyStore) seedDemoRestaurants(application, Path.of("demo/seed.json"));
@@ -169,7 +170,8 @@ public final class ApiServer {
                 return;
             }
             if (!path.equals("/api/firebase-session") && !path.equals("/api/command")
-                    && !path.equals("/api/register-account") && !(demoMode && path.equals("/api/demo-login"))) {
+                    && !path.equals("/api/register-account")
+                    && !(demoMode && (path.equals("/api/demo-login") || path.equals("/api/demo-register")))) {
                 send(exchange, 404, Map.of("error", "Endpoint not found"));
                 return;
             }
@@ -284,6 +286,22 @@ public final class ApiServer {
 
     private void handleDemo(HttpExchange exchange, String path, Map<String, String> fields, String authorization)
             throws IOException {
+        if (path.equals("/api/demo-register")) {
+            String username = required(fields, "username").trim();
+            String password = required(fields, "password");
+            Role role = Role.valueOf(required(fields, "role").toUpperCase(Locale.ROOT));
+            if (role == Role.OPERATOR) throw new IllegalArgumentException("Operator accounts cannot self-register");
+            if (username.length() > 254 || !username.contains("@"))
+                throw new IllegalArgumentException("Enter a valid email address");
+            String restaurantName = role == Role.RESTAURANT ? required(fields, "restaurantName").trim() : "";
+            if (role == Role.RESTAURANT && restaurantName.length() > 80)
+                throw new IllegalArgumentException("Restaurant name must be at most 80 characters");
+            var user = application.register(username, password, List.of(role));
+            if (role == Role.RESTAURANT) application.createSignupRestaurant(user, restaurantName);
+            Session session = application.login(username, password);
+            send(exchange, 200, Map.of("token", session.token(), "username", user.username(), "role", user.role()));
+            return;
+        }
         if (path.equals("/api/demo-login")) {
             try {
                 Session session = application.login(required(fields, "username"), required(fields, "password"));

@@ -23,6 +23,8 @@ Demo login credentials (all use password `demo1234`):
 | Courier | `courier@demo.local` |
 | Operator | `operator@demo.local` |
 
+The demo sign-in page also lets visitors create Customer, Restaurant, and Courier accounts. Use fictional email addresses and a password of at least six characters. Operator accounts cannot self-register. New account IDs, roles, and salted password hashes are stored in `accounts.properties` on the same `demodata` volume; new restaurants use the existing restaurant store. Sessions still end on a backend restart.
+
 Pricing, promotions, ordering, preparation, dispatch, pickup, and delivery use the existing command and business logic. The demo UI chooses the local sign-in flow after `/api/mode` reports demo mode. Normal Firebase mode remains the default. For a normal production frontend build, supply `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_DATABASE_URL`, and `VITE_API_URL` as build-time variables; none is built into the demo image by default. Restrict any Firebase browser key used for normal production by HTTP referrer.
 
 The existing Render backend still needs `SUGARRUSH_DATABASE_URL` in its environment. The Blueprint prompts for it on a new setup; for an existing Render service, set or confirm it in the Render dashboard before redeploying.

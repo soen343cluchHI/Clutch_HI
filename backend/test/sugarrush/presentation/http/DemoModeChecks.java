@@ -24,11 +24,13 @@ public final class DemoModeChecks {
     public static void main(String[] args) throws Exception {
         Path directory = Files.createTempDirectory("sugarrush-demo-");
         Path store = directory.resolve("restaurants.properties");
+        Path accountStore = directory.resolve("accounts.properties");
         HttpServer server = null;
         try {
             SugarRush application = SugarRush.fromConfig(Path.of("backend/config/app.properties"));
             for (Role role : Role.values())
                 application.provisionDemoAccount(role.name().toLowerCase() + "@demo.local", "demo1234", role);
+            application.useDemoAccountStore(accountStore);
             application.useDemoRestaurantStore(store);
             ApiServer.seedDemoRestaurants(application, Path.of("backend/demo/seed.json"));
             ApiServer.seedDemoRestaurants(application, Path.of("backend/demo/seed.json"));
@@ -49,6 +51,38 @@ public final class DemoModeChecks {
             }
             check(getStatus("/api/demo-login", null, Map.of("username", "operator@demo.local", "password", "wrong")) == 401,
                     "bad password rejected");
+            Map<String, Object> newCustomer = Json.object(post("/api/demo-register", null,
+                    Map.of("username", "new-customer@demo.local", "password", "newdemo1234", "role", "CUSTOMER")));
+            String newCustomerToken = String.valueOf(newCustomer.get("token"));
+            check("CUSTOMER".equals(newCustomer.get("role")), "customer registration");
+            check("CUSTOMER".equals(Json.object(post("/api/firebase-session", newCustomerToken, Map.of())).get("role")),
+                    "new customer session");
+            check(getStatus("/api/demo-register", null, Map.of("username", "new-customer@demo.local",
+                    "password", "newdemo1234", "role", "CUSTOMER")) == 400, "duplicate registration rejected");
+            check(getStatus("/api/demo-register", null, Map.of("username", "new-operator@demo.local",
+                    "password", "newdemo1234", "role", "OPERATOR")) == 400, "operator registration rejected");
+            Map<String, Object> newRestaurant = Json.object(post("/api/demo-register", null,
+                    Map.of("username", "new-restaurant@demo.local", "password", "newdemo1234",
+                            "role", "RESTAURANT", "restaurantName", "Sample Shop")));
+            String newRestaurantToken = String.valueOf(newRestaurant.get("token"));
+            check("RESTAURANT".equals(newRestaurant.get("role")), "restaurant registration");
+            check(action(newRestaurantToken, "BROWSE_RESTAURANTS", Map.of()).contains("Sample Shop"),
+                    "new restaurant provisioned");
+            Map<String, Object> newCourier = Json.object(post("/api/demo-register", null,
+                    Map.of("username", "new-courier@demo.local", "password", "newdemo1234", "role", "COURIER")));
+            check("COURIER".equals(newCourier.get("role")), "courier registration");
+            check(Json.object(action(String.valueOf(newCourier.get("token")), "COURIER_STATUS", Map.of())).get("userId") != null,
+                    "new courier provisioned");
+            SugarRush restarted = SugarRush.fromConfig(Path.of("backend/config/app.properties"));
+            for (Role role : Role.values())
+                restarted.provisionDemoAccount(role.name().toLowerCase() + "@demo.local", "demo1234", role);
+            restarted.useDemoAccountStore(accountStore);
+            restarted.useDemoRestaurantStore(store);
+            check(restarted.login("new-customer@demo.local", "newdemo1234").user().role() == Role.CUSTOMER,
+                    "registered password survived restart");
+            check(restarted.ownsRestaurant(restarted.login("new-restaurant@demo.local", "newdemo1234").user().id()),
+                    "new restaurant ownership survived restart");
+            check(!Files.readString(accountStore).contains("newdemo1234"), "passwords stored as hashes");
             String listed = action(tokens.get("operator"), "BROWSE_RESTAURANTS", Map.of());
             check(listed.contains("demo-restaurant-1") && listed.contains("demo-restaurant-2"), "seeded restaurants");
             check(application.restaurantView("demo-restaurant-2").menu().size() == 2, "seeded menu");
@@ -80,10 +114,11 @@ public final class DemoModeChecks {
             SugarRush reloaded = SugarRush.fromConfig(Path.of("backend/config/app.properties"));
             reloaded.useDemoRestaurantStore(store);
             check(!reloaded.hasRestaurant("demo-restaurant-1"), "reset persisted on disk");
-            System.out.println("Passed demo login, seed, pricing, promotion and full order lifecycle checks.");
+            System.out.println("Passed demo signup, login, persistence, seed, pricing, promotion and full order lifecycle checks.");
         } finally {
             if (server != null) server.stop(0);
             Files.deleteIfExists(store);
+            Files.deleteIfExists(accountStore);
             Files.deleteIfExists(directory);
         }
     }

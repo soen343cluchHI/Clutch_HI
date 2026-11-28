@@ -146,6 +146,10 @@ public final class SugarRush {
         restaurants.useStore(path);
     }
 
+    public synchronized void useDemoAccountStore(Path path) throws IOException {
+        registration.useStore(path);
+    }
+
     public synchronized Session login(String username, String password) {
         return authentication.login(username, password);
     }
